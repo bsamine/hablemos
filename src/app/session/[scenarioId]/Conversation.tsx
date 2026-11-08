@@ -146,6 +146,11 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       audio.onLevel = setTutorSpeaking;
       audioRef.current = audio;
       await audio.ctx.resume(); // must happen inside the tap on iPhone
+      // Microphone first: a mic problem shows up clearly and doesn't burn a Gemini token.
+      // Chunks are dropped until the Gemini session exists.
+      await audio.start((b64) =>
+        sessionRef.current?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } }),
+      );
 
       const res = await fetch("/api/sessions", {
         method: "POST",
@@ -158,19 +163,22 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       setLimit(data.minutes * 60);
 
       await connect(data);
-      await audio.start((b64) =>
-        sessionRef.current?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } }),
-      );
       startedAtRef.current = Date.now();
       setPhase("live");
       sessionRef.current?.sendRealtimeInput({ text: "(La séance commence. Salue-la.)" });
     } catch (e) {
       console.error(e);
+      endingRef.current = true; // our own cleanup must not be reported as a Gemini close
+      const name = e instanceof Error ? e.name : "";
       const msg = e instanceof Error ? e.message : String(e);
       setError(
-        /Permission|NotAllowed/i.test(msg)
-          ? "Le micro est bloqué. Autorise le micro pour ce site dans Réglages > Safari."
-          : msg,
+        /NotAllowed|Permission/i.test(name + msg)
+          ? "Le micro est bloqué. Autorise le micro pour ce site (icône à gauche de l'adresse, ou Réglages > Safari sur iPhone)."
+          : /NotFound|DevicesNotFound/i.test(name + msg)
+            ? "Aucun micro trouvé. Branche ou active un micro puis réessaie."
+            : /NotReadable|TrackStart/i.test(name + msg)
+              ? "Le micro est utilisé par une autre application (Zoom, Teams, Notion…). Ferme-la puis réessaie."
+              : `Erreur au démarrage : ${name ? name + " — " : ""}${msg}`,
       );
       setPhase("error");
       await cleanup();
