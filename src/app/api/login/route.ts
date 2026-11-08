@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import { authCookieValue, checkPasscode, COOKIE } from "@/lib/auth";
 
+// Relative Location headers: correct behind any reverse proxy (Caddy), whatever the internal URL is.
+const go = (path: string) => new NextResponse(null, { status: 303, headers: { Location: path } });
+
 export async function POST(req: Request) {
   const form = await req.formData();
   const code = String(form.get("code") ?? "");
-  const url = new URL(req.url);
-  if (!checkPasscode(code)) {
-    return NextResponse.redirect(new URL("/login?e=1", url), 303);
-  }
-  const res = NextResponse.redirect(new URL("/", url), 303);
+  if (!checkPasscode(code)) return go("/login?e=1");
+
+  const https = (req.headers.get("x-forwarded-proto") ?? new URL(req.url).protocol.replace(":", "")) === "https";
+  const res = go("/");
   res.cookies.set(COOKIE, authCookieValue(), {
     httpOnly: true,
     sameSite: "lax",
-    secure: url.protocol === "https:",
+    secure: https,
     path: "/",
     maxAge: 60 * 60 * 24 * 180,
   });
