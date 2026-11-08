@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { createLiveToken, LIVE_API_VERSION, LIVE_MODEL, VOICE } from "@/lib/gemini";
+import { createLiveToken, LIVE_API_VERSION, LIVE_MODEL, liveConfig, VOICE } from "@/lib/gemini";
 import { dueWords, knownErrors } from "@/lib/learning";
 import { buildTutorPrompt } from "@/lib/prompts";
 import { getScenario } from "@/lib/scenarios";
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
 
   let token: string;
   try {
-    token = await createLiveToken();
+    token = await createLiveToken(LIVE_API_VERSION, LIVE_MODEL, liveConfig(systemInstruction));
   } catch (e) {
     console.error("token error", e);
     return NextResponse.json({ error: "Impossible de contacter Gemini. Vérifie la clé API." }, { status: 502 });

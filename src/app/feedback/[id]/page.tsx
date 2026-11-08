@@ -10,9 +10,16 @@ export const dynamic = "force-dynamic";
 
 const STATUS: Record<string, string> = { used_alone: "✓ utilisé seule", used_with_help: "≈ avec aide", not_used: "○ pas encore" };
 
-export default async function FeedbackPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function FeedbackPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ e?: string }>;
+}) {
   await requireAuth();
   const { id } = await params;
+  const { e: lastError } = await searchParams;
   const row = db().prepare("SELECT * FROM sessions WHERE id = ?").get(Number(id)) as SessionRow | undefined;
   if (!row) notFound();
   const scenario = getScenario(row.scenario_id);
@@ -21,7 +28,8 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
     return (
       <div className="stack">
         <h1>Bilan</h1>
-        <p>Le bilan de cette séance n'est pas encore prêt.</p>
+        <p>Le bilan de cette séance n'est pas encore prêt. Ta conversation est bien enregistrée.</p>
+        {lastError && <p className="error small">{lastError}</p>}
         {row.transcript && <Retry id={row.id} />}
         <Link href="/" className="link">‹ Accueil</Link>
       </div>

@@ -55,7 +55,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     fb = (await generateJson(prompt)) as Feedback;
   } catch (e) {
     console.error("debrief error", e);
-    return NextResponse.json({ error: "Le bilan a échoué. Réessaie depuis l'historique." }, { status: 502 });
+    const detail = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: `Le bilan a échoué (${detail}). Ta conversation est enregistrée : réessaie le bilan.`, sessionId: row.id }, { status: 502 });
   }
   db().prepare("UPDATE sessions SET feedback = ? WHERE id = ?").run(JSON.stringify(fb), row.id);
   applyFeedback(row.id, scenario, fb);

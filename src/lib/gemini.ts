@@ -1,8 +1,9 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Modality, type LiveConnectConfig } from "@google/genai";
 
 export const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
 export const LIVE_API_VERSION = process.env.GEMINI_LIVE_API_VERSION ?? "v1alpha";
 export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL ?? "gemini-3.8-flash";
+export const TEXT_FALLBACK_MODEL = process.env.GEMINI_TEXT_FALLBACK_MODEL ?? "gemini-flash-latest";
 export const VOICE = process.env.GEMINI_VOICE ?? "Aoede";
 
 export function serverClient(apiVersion?: string) {
@@ -11,15 +12,33 @@ export function serverClient(apiVersion?: string) {
   return new GoogleGenAI({ apiKey, ...(apiVersion ? { httpOptions: { apiVersion } } : {}) });
 }
 
-/** Short-lived token the browser uses to open ONE Live session directly with Gemini. */
-export async function createLiveToken(apiVersion = LIVE_API_VERSION, model = LIVE_MODEL): Promise<string> {
+/** The full Live session setup. It is baked into the token: Gemini ignores config sent by the browser. */
+export function liveConfig(systemInstruction?: string): LiveConnectConfig {
+  return {
+    responseModalities: [Modality.AUDIO],
+    ...(systemInstruction ? { systemInstruction } : {}),
+    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
+    sessionResumption: {},
+    contextWindowCompression: { slidingWindow: {} },
+  };
+}
+
+/** Short-lived token the browser uses to open ONE Live session directly with Gemini.
+ *  When `config` is given, it is locked into the token (Gemini then ignores the browser's config). */
+export async function createLiveToken(
+  apiVersion = LIVE_API_VERSION,
+  model = LIVE_MODEL,
+  config?: LiveConnectConfig,
+): Promise<string> {
   const ai = serverClient(apiVersion);
   const token = await ai.authTokens.create({
     config: {
       uses: 1,
       expireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
       newSessionExpireTime: new Date(Date.now() + 2 * 60_000).toISOString(),
-      liveConnectConstraints: { model },
+      liveConnectConstraints: { model, ...(config ? { config } : {}) },
       httpOptions: { apiVersion },
     },
   });
@@ -27,14 +46,27 @@ export async function createLiveToken(apiVersion = LIVE_API_VERSION, model = LIV
   return token.name;
 }
 
+/** Ask a text model for JSON. Tries the main model, then a fallback. Throws with the real reasons. */
 export async function generateJson(prompt: string): Promise<unknown> {
   const ai = serverClient();
-  const res = await ai.models.generateContent({
-    model: TEXT_MODEL,
-    contents: prompt,
-    config: { responseMimeType: "application/json", temperature: 0.3 },
-  });
-  const text = res.text ?? "";
-  const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-  return JSON.parse(cleaned);
+  const errors: string[] = [];
+  for (const model of [...new Set([TEXT_MODEL, TEXT_FALLBACK_MODEL])]) {
+    try {
+      const res = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 8192 },
+      });
+      const text = res.text ?? "";
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      if (start < 0 || end <= start) throw new Error(`réponse sans JSON (${text.slice(0, 120) || "vide"})`);
+      return JSON.parse(text.slice(start, end + 1));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`debrief with ${model} failed:`, msg);
+      errors.push(`${model}: ${msg.slice(0, 200)}`);
+    }
+  }
+  throw new Error(errors.join(" | "));
 }

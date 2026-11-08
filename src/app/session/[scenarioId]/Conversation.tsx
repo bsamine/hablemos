@@ -165,7 +165,9 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       await connect(data);
       startedAtRef.current = Date.now();
       setPhase("live");
-      sessionRef.current?.sendRealtimeInput({ text: "(La séance commence. Salue-la.)" });
+      sessionRef.current?.sendRealtimeInput({
+        text: `(La séance commence. Présente-toi : tu es Lucía. Annonce le thème du jour : « ${scenario.title} ».)`,
+      });
     } catch (e) {
       console.error(e);
       endingRef.current = true; // our own cleanup must not be reported as a Gemini close
@@ -208,6 +210,8 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
     if (res.ok) router.push(`/feedback/${id}`);
     else {
       const data = await res.json().catch(() => ({}));
+      // The transcript is saved: the feedback page has a "Créer le bilan" retry button.
+      if (res.status === 502) return router.push(`/feedback/${id}?e=${encodeURIComponent(data.error ?? "")}`);
       setError(data.error ?? "Le bilan n'a pas pu être créé.");
       setPhase("error");
     }
