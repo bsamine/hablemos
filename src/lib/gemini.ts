@@ -3,7 +3,11 @@ import { GoogleGenAI, Modality, type LiveConnectConfig } from "@google/genai";
 export const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
 export const LIVE_API_VERSION = process.env.GEMINI_LIVE_API_VERSION ?? "v1alpha";
 export const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL ?? "gemini-3.8-flash";
-export const TEXT_FALLBACK_MODEL = process.env.GEMINI_TEXT_FALLBACK_MODEL ?? "gemini-flash-latest";
+// Tried in order when the main model is overloaded or unavailable (names from ./scripts/check-models.sh).
+export const TEXT_FALLBACK_MODELS = (process.env.GEMINI_TEXT_FALLBACK_MODELS ?? "gemini-3.7-flash,gemini-3.5-flash,gemini-2.5-flash")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 export const VOICE = process.env.GEMINI_VOICE ?? "Aoede";
 
 export function serverClient(apiVersion?: string) {
@@ -46,11 +50,22 @@ export async function createLiveToken(
   return token.name;
 }
 
-/** Ask a text model for JSON. Tries the main model, then a fallback. Throws with the real reasons. */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const isBusy = (msg: string) => /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand)\b/i.test(msg);
+
+/** Ask a text model for JSON. Each model gets one retry when busy, then the next model is tried. */
 export async function generateJson(prompt: string): Promise<unknown> {
-  const ai = serverClient();
+  const ai = serverClient("v1beta");
   const errors: string[] = [];
-  for (const model of [...new Set([TEXT_MODEL, TEXT_FALLBACK_MODEL])]) {
+  const attempts = [...new Set([TEXT_MODEL, ...TEXT_FALLBACK_MODELS])].flatMap((m) => [
+    { model: m, wait: 0 },
+    { model: m, wait: 2500 },
+  ]);
+  for (const { model, wait } of attempts) {
+    if (wait) {
+      if (!isBusy(errors.at(-1) ?? "")) continue; // only retry the same model when it was busy
+      await sleep(wait);
+    }
     try {
       const res = await ai.models.generateContent({
         model,
