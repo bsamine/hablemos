@@ -1,0 +1,5 @@
+# Used by scripts/deploy.sh when another reverse proxy already owns ports 80/443.
+services:
+  app:
+    ports:
+      - "127.0.0.1:3000:3000"

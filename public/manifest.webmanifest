@@ -1,0 +1,14 @@
+{
+  "name": "Hablemos",
+  "short_name": "Hablemos",
+  "description": "Parler espagnol avec Lucía, 15 minutes par jour",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fbf6ef",
+  "theme_color": "#c8553d",
+  "lang": "fr",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
