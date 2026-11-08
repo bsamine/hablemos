@@ -36,6 +36,8 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
   const handleRef = useRef<string | null>(null);
   const endingRef = useRef(false);
   const startedAtRef = useRef(0);
+  const connectedAtRef = useRef(0);
+  const gotAudioRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
     for (const part of sc?.modelTurn?.parts ?? []) {
       const d = part.inlineData;
       if (d?.data && d.mimeType?.startsWith("audio/")) {
+        gotAudioRef.current = true;
         const rate = Number(/rate=(\d+)/.exec(d.mimeType)?.[1] ?? 24000);
         audioRef.current?.play(d.data, rate);
       }
@@ -95,11 +98,21 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
         onerror: (e) => console.error("live error", e),
         onclose: (e) => {
           sessionRef.current = null;
-          if (!endingRef.current) void reconnect(e?.reason);
+          console.warn("live close", e?.code, e?.reason);
+          if (endingRef.current) return;
+          const early = Date.now() - connectedAtRef.current < 8000 || !gotAudioRef.current;
+          if (early) {
+            // Closed before the conversation really started: a config/model problem, not a network blip.
+            setError(`Gemini a fermé la connexion (code ${e?.code ?? "?"}) : ${e?.reason || "sans raison"}`);
+            setPhase("error");
+            return;
+          }
+          void reconnect(e?.reason);
         },
       },
     });
     sessionRef.current = session;
+    connectedAtRef.current = Date.now();
     return session;
   }
 
@@ -119,7 +132,7 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       setPhase("live");
     } catch (e) {
       console.error(e);
-      setError("Impossible de reprendre la conversation.");
+      setError(`Impossible de reprendre la conversation : ${e instanceof Error ? e.message : String(e)}`);
       setPhase("error");
     }
   }
