@@ -1,0 +1,13 @@
+# Used by scripts/deploy.sh when an existing Caddy (e.g. n8n's) already owns 80/443.
+# The app joins that Caddy's Docker network; Caddy proxies to hablemos-app:3000.
+services:
+  app:
+    networks:
+      default: {}
+      proxy:
+        aliases: [hablemos-app]
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:?PROXY_NETWORK must be set}
