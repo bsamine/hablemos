@@ -12,15 +12,15 @@ export function serverClient(apiVersion?: string) {
 }
 
 /** Short-lived token the browser uses to open ONE Live session directly with Gemini. */
-export async function createLiveToken(): Promise<string> {
-  const ai = serverClient(LIVE_API_VERSION);
+export async function createLiveToken(apiVersion = LIVE_API_VERSION, model = LIVE_MODEL): Promise<string> {
+  const ai = serverClient(apiVersion);
   const token = await ai.authTokens.create({
     config: {
       uses: 1,
       expireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
       newSessionExpireTime: new Date(Date.now() + 2 * 60_000).toISOString(),
-      liveConnectConstraints: { model: LIVE_MODEL },
-      httpOptions: { apiVersion: LIVE_API_VERSION },
+      liveConnectConstraints: { model },
+      httpOptions: { apiVersion },
     },
   });
   if (!token.name) throw new Error("Gemini returned no token");
