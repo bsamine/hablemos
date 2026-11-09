@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import TabBar from "../TabBar";
 import { history } from "@/lib/history";
 import HistoryList from "../HistoryList";
 
@@ -9,7 +10,7 @@ export default async function Historique() {
   await requireAuth();
   const items = history();
   return (
-    <div className="stack">
+    <div className="stack with-tabbar">
       <header className="top">
         <Link href="/" className="link">‹ Accueil</Link>
         <span className="muted small">{items.length} séances</span>
@@ -17,6 +18,7 @@ export default async function Historique() {
       <h1>Mes bilans</h1>
       <p className="muted">Relis tes corrections et réécoute les bonnes phrases avant ta prochaine séance.</p>
       <HistoryList items={items} />
+      <TabBar active={""} />
     </div>
   );
 }

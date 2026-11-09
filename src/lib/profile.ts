@@ -14,16 +14,22 @@ function set(key: string, value: string) {
     .run(key, value);
 }
 
-export type Profile = { name: string; about: string; level: Level };
+export type Profile = { name: string; about: string; level: Level; partner: string };
 
 export function getProfile(): Profile {
   const level = (get("level") ?? process.env.LEARNER_LEVEL ?? "A1") as Level;
-  return { name: get("name") ?? "", about: get("about") ?? "", level: LEVELS.includes(level) ? level : "A1" };
+  return {
+    name: get("name") ?? "",
+    about: get("about") ?? "",
+    level: LEVELS.includes(level) ? level : "A1",
+    partner: get("partner") ?? "",
+  };
 }
 
 export function saveProfile(p: Partial<Profile>) {
   if (p.name !== undefined) set("name", p.name.trim().slice(0, 60));
   if (p.about !== undefined) set("about", p.about.trim().slice(0, 2000));
+  if (p.partner !== undefined) set("partner", p.partner.trim().slice(0, 60));
   if (p.level && LEVELS.includes(p.level)) {
     set("level", p.level);
     set("level_dismissed", "");

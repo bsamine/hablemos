@@ -1,15 +1,30 @@
 import { db, type SessionRow, type WordRow } from "./db";
+import { getJobAd } from "./jobs";
+import { getProfile } from "./profile";
 import { dueWords } from "./learning";
 import type { Feedback } from "./prompts";
-import { getScenario, type Scenario, type TargetWord } from "./scenarios";
+import { getScenario, SCENARIOS, type Scenario, type TargetWord } from "./scenarios";
 
-export type Mode = "scenario" | "redo" | "review" | "custom";
+export type Mode = "scenario" | "redo" | "review" | "custom" | "interview" | "duo" | "shadowing";
+
+/** Which area of the app a mode belongs to. */
+export const AREA: Record<Mode, "lecons" | "entretiens" | "vie-reelle"> = {
+  scenario: "lecons",
+  redo: "lecons",
+  review: "lecons",
+  shadowing: "lecons",
+  interview: "entretiens",
+  custom: "vie-reelle",
+  duo: "vie-reelle",
+};
 
 /** Everything a live session needs; stored with the session so the debrief and history can use it. */
 export type SessionSpec = {
   mode: Mode;
   scenarioId?: string;
   fromSessionId?: number;
+  jobAdId?: number;
+  duoGame?: string;
   title: string; // shown in Spanish
   titleFr: string;
   taskGoal: string; // French, read by the learner and the tutor
@@ -25,7 +40,10 @@ export type StartRequest =
   | { mode: "scenario"; scenarioId: string }
   | { mode: "redo"; fromSessionId: number }
   | { mode: "review" }
-  | { mode: "custom"; topic: string };
+  | { mode: "custom"; topic: string }
+  | { mode: "interview"; jobAdId: number }
+  | { mode: "duo"; game: string }
+  | { mode: "shadowing" };
 
 const defaultMinutes = () => Number(process.env.SESSION_MINUTES ?? 15);
 
@@ -129,8 +147,155 @@ export function customSpec(topic: string): SessionSpec | null {
   };
 }
 
+/** Mock interview for a real job ad she pasted. */
+export function interviewSpec(jobAdId: number): SessionSpec | null {
+  const ad = getJobAd(jobAdId);
+  if (!ad) return null;
+  const { level } = getProfile();
+  const beginner = level === "A1" || level === "A2";
+  const company = ad.company || "l'entreprise";
+  return {
+    mode: "interview",
+    jobAdId,
+    title: `Entretien : ${ad.title}`,
+    titleFr: ad.company ? `Simulation chez ${ad.company}` : "Simulation d'entretien",
+    taskGoal: `Passer un entretien en espagnol pour le poste « ${ad.title} »${ad.company ? ` chez ${ad.company}` : ""} et convaincre la recruteuse.`,
+    persona: `une recruteuse de ${company}`,
+    focus: "entretien d'embauche",
+    words: [],
+    minutes: 15,
+    plan: `Tu joues une recruteuse de ${company} qui fait passer un entretien pour le poste « ${ad.title} ».
+L'OFFRE (lis-la attentivement, tes questions doivent s'y rapporter) :
+"""
+${ad.text.slice(0, 3000)}
+"""
+
+${
+  beginner
+    ? `ADAPTATION AU NIVEAU (${level}) : entretien réaliste mais accessible. Pose des questions courtes et lentes, une à la fois. Avant une question difficile, donne-lui en français une expression utile pour commencer sa réponse (ex. « Tu peux commencer par : Tengo experiencia en… »). Elle peut demander un mot en français.`
+    : `NIVEAU (${level}) : entretien réaliste, rythme naturel, relances quand la réponse est vague (« ¿Me puede dar un ejemplo concreto? »).`
+}
+
+DÉROULÉ (12-15 min) :
+1. Accueil : salue-la, présente-toi (prénom inventé, poste RH), une question pour briser la glace.
+2. « Háblame de ti » : son parcours.
+3. Motivation : pourquoi ce poste et cette entreprise ; relie à l'offre.
+4. Deux questions sur son expérience, liées aux exigences de l'offre.
+5. Une question de mise en situation (une priorité, un conflit, une erreur).
+6. Questions pratiques : disponibilité, mobilité, langues.
+7. « ¿Tiene alguna pregunta para nosotros? » : laisse-la poser ses questions et réponds de façon crédible.
+8. Clôture en espagnol. Puis SORS DU RÔLE et, en français : 2 points forts et 1 conseil prioritaire, et dis-lui que son bilan détaillé s'affiche à l'écran.
+
+CORRECTION PENDANT L'ENTRETIEN : reste dans ton rôle. Ne l'interromps pas au milieu d'une réponse. Après une réponse avec une erreur importante, sors du rôle 3 secondes : « (Petit conseil : on dit « he trabajado ». Seguimos.) »${beginner ? " — fais-le à chaque erreur importante." : " — seulement pour les erreurs qui gênent le sens."}
+Utilise ce que tu sais d'elle (parcours, métier) pour des questions crédibles, sans inventer de faits.`,
+  };
+}
+
+export const DUO_GAMES: { id: string; title: string; titleFr: string; goal: string }[] = [
+  {
+    id: "conocernos",
+    title: "Preguntas para conocernos",
+    titleFr: "Questions pour mieux se connaître",
+    goal: "Se poser à tour de rôle des questions qu'on ne s'est jamais posées (souvenirs, rêves, petites manies).",
+  },
+  {
+    id: "viaje",
+    title: "Planear un viaje juntos",
+    titleFr: "Préparer un voyage à deux",
+    goal: "Choisir ensemble une destination en Espagne et organiser 3 jours : transport, logement, activités, budget.",
+  },
+  {
+    id: "debate",
+    title: "Debate amistoso",
+    titleFr: "Débats légers",
+    goal: "Débattre de questions légères (playa o montaña, cocinar o salir, madrugar o trasnochar) et défendre son camp.",
+  },
+  {
+    id: "restaurante",
+    title: "Cena en Madrid",
+    titleFr: "Dîner au restaurant",
+    goal: "Jeu de rôle au restaurant : l'un commande, l'autre est serveur, Carla crée des imprévus.",
+  },
+];
+
+/** Both partners speak Spanish together; Carla hosts and coaches the learner. */
+export function duoSpec(game: string): SessionSpec | null {
+  const g = DUO_GAMES.find((x) => x.id === game);
+  if (!g) return null;
+  const p = getProfile();
+  const learner = p.name || "l'élève";
+  const partner = p.partner || "son partenaire";
+  return {
+    mode: "duo",
+    duoGame: g.id,
+    title: `Duo : ${g.title}`,
+    titleFr: g.titleFr,
+    taskGoal: g.goal,
+    persona: "Carla, l'animatrice du jeu",
+    focus: "conversation à deux",
+    words: [],
+    minutes: 12,
+    plan: `SÉANCE EN DUO : deux personnes parlent dans le même micro.
+- ${learner} est ton élève (niveau ${p.level}).
+- ${partner} parle très bien espagnol et l'aide.
+Tu es l'animatrice du jeu « ${g.title} » : ${g.goal}
+
+RÈGLES DU DUO :
+1. Explique le jeu en une phrase en français, puis lance-le en espagnol.
+2. Interpelle chacun par son prénom pour qu'on sache qui doit parler (« ${learner}, pregúntale a ${partner}… »). ${learner} doit parler au moins autant que ${partner}.
+3. Demande à ${partner} de parler simplement, et de l'aider en reformulant plutôt qu'en répondant à sa place.
+4. Corrige seulement ${learner}, brièvement, à sa façon habituelle (« Casi… », règle en français en 10 mots, elle répète). Ne corrige pas ${partner}.
+5. Relance le jeu avec des cartes : questions, imprévus, petits défis (« 30 secondes sans français »). Compte des points pour rire.
+6. Après environ 10 minutes, annonce le score, félicite-les en français, et dis-leur que le bilan de ${learner} s'affiche à l'écran.`,
+  };
+}
+
+/** Repeat-after-me practice on sentences she already met. */
+export function shadowingSpec(): SessionSpec | null {
+  const { level } = getProfile();
+  const rows = db()
+    .prepare("SELECT * FROM words WHERE example <> '' ORDER BY due_at ASC LIMIT 8")
+    .all() as WordRow[];
+  let sentences = rows.map((w) => w.example);
+  if (sentences.length < 5) {
+    const extra = getScenarioPool(level).flatMap((s) => s.words.map((w) => w.example)).filter(Boolean);
+    sentences = [...new Set([...sentences, ...extra])].slice(0, 8);
+  }
+  if (!sentences.length) return null;
+  return {
+    mode: "shadowing",
+    title: "Shadowing",
+    titleFr: "Répéter après Carla",
+    taskGoal: `Répéter ${sentences.length} phrases juste après Carla, d'abord lentement puis à vitesse normale, pour l'accent et la fluidité.`,
+    persona: "Carla, sa professeure",
+    focus: "prononciation et rythme",
+    words: [],
+    minutes: 5,
+    plan: `Exercice de shadowing d'environ 5 minutes. Les phrases :
+${sentences.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+Explique en une phrase en français : « Je dis une phrase, tu la répètes tout de suite, en imitant ma musique. »
+Pour chaque phrase :
+1. Dis-la lentement, en articulant. Elle répète.
+2. Dis-la à vitesse naturelle, avec l'intonation de Madrid. Elle répète.
+3. Si sa répétition (transcrite) oublie ou change des mots, dis lesquels en une phrase, puis fais répéter une dernière fois.
+4. Un mot d'encouragement et phrase suivante. Pas de longues explications : le rythme compte.
+À la fin, choisis la phrase la plus difficile et fais-la répéter 3 fois de plus en accélérant. Félicite-la en français et dis-lui que son bilan s'affiche à l'écran.`,
+  };
+}
+
+function getScenarioPool(level: string): Scenario[] {
+  return SCENARIOS.filter((s) => s.level === level).slice(0, 3);
+}
+
 export function buildSpec(req: StartRequest): SessionSpec | null {
   switch (req.mode) {
+    case "interview":
+      return interviewSpec(Number(req.jobAdId));
+    case "duo":
+      return duoSpec(String(req.game ?? ""));
+    case "shadowing":
+      return shadowingSpec();
     case "scenario": {
       const s = getScenario(req.scenarioId);
       return s ? scenarioSpec(s) : null;

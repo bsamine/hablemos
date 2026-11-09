@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import TabBar from "../TabBar";
 import { frDate } from "@/lib/format";
 import { getProfile, LEVELS, listFacts } from "@/lib/profile";
 
@@ -18,7 +19,7 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
   const p = getProfile();
   const facts = listFacts();
   return (
-    <div className="stack">
+    <div className="stack with-tabbar">
       <header className="top">
         <Link href="/" className="link">‹ Accueil</Link>
         {ok && <span className="small good-text">Enregistré ✓</span>}
@@ -84,6 +85,7 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
           <button className="secondary" type="submit">Ajouter</button>
         </form>
       </section>
+      <TabBar active={""} />
     </div>
   );
 }

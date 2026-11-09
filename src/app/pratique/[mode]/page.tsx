@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
-import { customSpec, redoSpec, reviewSpec, type SessionSpec, type StartRequest } from "@/lib/modes";
+import {
+  customSpec,
+  duoSpec,
+  interviewSpec,
+  redoSpec,
+  reviewSpec,
+  shadowingSpec,
+  type SessionSpec,
+  type StartRequest,
+} from "@/lib/modes";
+import { getProfile } from "@/lib/profile";
 import Conversation from "../../Conversation";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +29,7 @@ export default async function Pratique({
   searchParams,
 }: {
   params: Promise<{ mode: string }>;
-  searchParams: Promise<{ from?: string; sujet?: string }>;
+  searchParams: Promise<{ from?: string; sujet?: string; offre?: string; jeu?: string }>;
 }) {
   await requireAuth();
   const { mode } = await params;
@@ -41,12 +51,29 @@ export default async function Pratique({
     spec = customSpec(q.sujet);
     start = { mode: "custom", topic: q.sujet };
     empty = "Décris la situation en quelques mots.";
+  } else if (mode === "entretien") {
+    spec = interviewSpec(Number(q.offre));
+    start = { mode: "interview", jobAdId: Number(q.offre) };
+    empty = "Offre introuvable. Ajoute-la depuis l'onglet Entretiens.";
+  } else if (mode === "duo") {
+    const p = getProfile();
+    if (!p.partner || !q.jeu)
+      return <PartnerForm current={p.partner} next={q.jeu ? `/pratique/duo?jeu=${q.jeu}` : "/vie-reelle"} />;
+    spec = duoSpec(String(q.jeu));
+    start = { mode: "duo", game: String(q.jeu) };
+    empty = "Choisis un jeu dans l'onglet Vie réelle.";
+  } else if (mode === "shadowing") {
+    spec = shadowingSpec();
+    start = { mode: "shadowing" };
+    empty = "Fais d'abord une leçon : le shadowing utilise tes phrases.";
   } else notFound();
+
+  const back = mode === "entretien" ? "/entretiens" : mode === "duo" || mode === "theme" ? "/vie-reelle" : "/lecons";
 
   return (
     <div className="stack">
       <header className="top">
-        <Link href="/" className="link">‹ Accueil</Link>
+        <Link href={back} className="link">‹ Retour</Link>
         {spec && <span className="muted small">≈ {spec.minutes} min</span>}
       </header>
       {spec && start ? (
@@ -72,11 +99,28 @@ export default async function Pratique({
   );
 }
 
+function PartnerForm({ current, next }: { current: string; next: string }) {
+  return (
+    <div className="stack">
+      <header className="top">
+        <Link href="/vie-reelle" className="link">‹ Retour</Link>
+      </header>
+      <h1>Mode duo</h1>
+      <p className="muted">Vous parlez à deux dans le même micro, Carla anime. Comment s'appelle ton partenaire ?</p>
+      <form action="/api/profile" method="post" className="stack">
+        <input name="partner" required maxLength={60} defaultValue={current} placeholder="Prénom de ton partenaire" />
+        <input type="hidden" name="next" value={next} />
+        <button className="primary big" type="submit">Continuer</button>
+      </form>
+    </div>
+  );
+}
+
 function ThemeForm() {
   return (
     <div className="stack">
       <header className="top">
-        <Link href="/" className="link">‹ Accueil</Link>
+        <Link href="/vie-reelle" className="link">‹ Retour</Link>
       </header>
       <div>
         <h1>Mon thème</h1>

@@ -6,6 +6,8 @@ import { isStale, type Turn } from "@/lib/debrief";
 import { frDate, minutes as fmtMinutes } from "@/lib/format";
 import type { Feedback } from "@/lib/prompts";
 import { sessionSpec } from "@/lib/modes";
+import type { Mission } from "@/lib/missions";
+import MissionCard from "../../MissionCard";
 import { Pending, Say } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +51,9 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
     );
   }
   const fb = JSON.parse(row.feedback) as Feedback;
+  const mission = db()
+    .prepare("SELECT * FROM missions WHERE session_id = ? AND status = 'pending'")
+    .get(row.id) as Mission | undefined;
   const canRedo = (fb.errors?.length ?? 0) + (fb.upgrades?.length ?? 0) > 0 && row.mode !== "review";
 
   return (
@@ -62,6 +67,40 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
         <h1>¡Muy bien!</h1>
         <p>{fb.summary_fr}</p>
       </div>
+
+      {fb.interview?.criteria?.length ? (
+        <section className="card scorecard">
+          <p className="eyebrow">Note de l'entretien</p>
+          {fb.interview.verdict_fr && <p><strong>{fb.interview.verdict_fr}</strong></p>}
+          <ul>
+            {fb.interview.criteria.map((c) => (
+              <li key={c.name}>
+                <span className="grow">
+                  <strong>{c.name}</strong>
+                  <span className="muted small">{c.comment_fr}</span>
+                </span>
+                <span className="score">
+                  {"●".repeat(Math.max(0, Math.min(5, Math.round(c.score))))}
+                  {"○".repeat(5 - Math.max(0, Math.min(5, Math.round(c.score))))}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {fb.interview.best_answer && (
+            <p className="small"><strong>Ta meilleure réponse :</strong> {fb.interview.best_answer}</p>
+          )}
+          {fb.interview.to_improve?.model_answer && (
+            <div className="card fix">
+              <p className="eyebrow">À retravailler</p>
+              <p className="small"><strong>Question :</strong> {fb.interview.to_improve.question}</p>
+              <p className="said small">« {fb.interview.to_improve.her_answer} »</p>
+              <p className="better">
+                <Say text={fb.interview.to_improve.model_answer} /> {fb.interview.to_improve.model_answer}
+              </p>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {!!fb.strengths_fr?.length && (
         <section className="card good">
@@ -137,6 +176,10 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
           <p className="eyebrow">Défi pour demain</p>
           <p><Say text={fb.tomorrow_challenge} /> {fb.tomorrow_challenge}</p>
         </section>
+      )}
+
+      {mission && (
+        <MissionCard mission={mission} next={`/feedback/${row.id}`} />
       )}
 
       {!!fb.learner_facts?.length && (

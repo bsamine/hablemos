@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import TabBar from "../TabBar";
 import { frDate } from "@/lib/format";
 import { stats } from "@/lib/learning";
 import { getProfile } from "@/lib/profile";
@@ -18,7 +19,7 @@ export default async function Progres() {
   const pct = (n: number) => (totalWords ? `${(n / totalWords) * 100}%` : "0%");
 
   return (
-    <div className="stack">
+    <div className="stack with-tabbar">
       <header className="top">
         <Link href="/" className="link">‹ Accueil</Link>
         <span className="muted small">Niveau {profile.level}</span>
@@ -95,6 +96,7 @@ export default async function Progres() {
           <p className="muted small">Apparaîtra après ta première séance.</p>
         )}
       </section>
+      <TabBar active={""} />
     </div>
   );
 }

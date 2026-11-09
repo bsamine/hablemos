@@ -1,10 +1,14 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { history } from "@/lib/history";
+import { listJobAds } from "@/lib/jobs";
 import { doneScenarioIds, stats } from "@/lib/learning";
+import { currentMission, missionStats } from "@/lib/missions";
 import { getProfile, LEVELS, levelSuggestion } from "@/lib/profile";
-import { SCENARIOS } from "@/lib/scenarios";
+import { LESSONS } from "@/lib/scenarios";
 import HistoryList from "./HistoryList";
+import MissionCard from "./MissionCard";
+import TabBar from "./TabBar";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +18,17 @@ export default async function Home() {
   const s = stats();
   const done = doneScenarioIds();
   const levelIdx = LEVELS.indexOf(profile.level);
-  const fits = SCENARIOS.filter((x) => LEVELS.indexOf(x.level) <= levelIdx + 1);
-  const next = fits.find((x) => !done.has(x.id)) ?? fits[0] ?? SCENARIOS[0];
+  const fits = LESSONS.filter((x) => LEVELS.indexOf(x.level) <= levelIdx + 1);
+  const next = fits.find((x) => !done.has(x.id)) ?? fits[0] ?? LESSONS[0];
   const recent = history({ limit: 3 });
   const suggestion = levelSuggestion();
-  const themes = [...new Set(SCENARIOS.map((x) => x.theme))];
+  const mission = currentMission();
+  const jobs = listJobAds().length;
+  const missionsDone = missionStats().done;
+  const lessonsDone = LESSONS.filter((x) => done.has(x.id)).length;
 
   return (
-    <div className="stack">
+    <div className="stack with-tabbar">
       <header className="top">
         <div className="hello">
           <img src="/carla.svg" alt="" className="avatar small-avatar" />
@@ -30,9 +37,7 @@ export default async function Home() {
             <span className="muted small">Niveau {profile.level} · avec Carla</span>
           </div>
         </div>
-        <form action="/api/logout" method="post">
-          <button className="link small" type="submit">Sortir</button>
-        </form>
+        <Link href="/profil" className="link small">Profil</Link>
       </header>
 
       {!profile.name && (
@@ -63,32 +68,42 @@ export default async function Home() {
       <section className="stats">
         <div><strong>{s.streak}</strong><span>jours d'affilée</span></div>
         <div><strong>{s.minutes}</strong><span>minutes parlées</span></div>
-        <Link href="/mots"><strong>{s.mastered}/{s.words}</strong><span>mots maîtrisés</span></Link>
+        <Link href="/progres"><strong>{s.mastered}/{s.words}</strong><span>mots maîtrisés ›</span></Link>
       </section>
 
       <Link href={`/session/${next.id}`} className="card hero">
-        <p className="eyebrow">Séance du jour · {next.theme} · {next.level}</p>
+        <p className="eyebrow">Aujourd'hui · {next.theme} · {next.level}</p>
         <h2>{next.title}</h2>
         <p className="muted">{next.titleFr}</p>
         <span className="primary pill">Parler avec Carla →</span>
       </Link>
 
-      <section className="quick">
-        <Link href="/pratique/revision" className={`card ${s.due ? "" : "dim"}`}>
-          <strong>⚡ Révision express</strong>
-          <span className="muted small">{s.due ? `${Math.min(s.due, 8)} mots · 4 min` : "Rien à revoir aujourd'hui"}</span>
+      {mission && <MissionCard mission={mission} next="/" />}
+
+      <section className="areas">
+        <Link href="/lecons" className="card area">
+          <span className="area-icon">📚</span>
+          <span className="grow">
+            <strong>Leçons</strong>
+            <span className="muted small">Apprendre pas à pas · {lessonsDone}/{LESSONS.length} faites{s.due ? ` · ${s.due} mots à revoir` : ""}</span>
+          </span>
+          <span className="muted">›</span>
         </Link>
-        <Link href="/pratique/theme" className="card">
-          <strong>✍️ Mon thème</strong>
-          <span className="muted small">Une situation à toi</span>
+        <Link href="/entretiens" className="card area">
+          <span className="area-icon">💼</span>
+          <span className="grow">
+            <strong>Entretiens</strong>
+            <span className="muted small">S'entraîner sur de vraies offres · {jobs} offre{jobs > 1 ? "s" : ""}</span>
+          </span>
+          <span className="muted">›</span>
         </Link>
-        <Link href="/progres" className="card">
-          <strong>📈 Mes progrès</strong>
-          <span className="muted small">Minutes, mots, erreurs</span>
-        </Link>
-        <Link href="/profil" className="card">
-          <strong>💬 Ce que Carla sait</strong>
-          <span className="muted small">Profil et mémoire</span>
+        <Link href="/vie-reelle" className="card area">
+          <span className="area-icon">🌍</span>
+          <span className="grow">
+            <strong>Vie réelle</strong>
+            <span className="muted small">Missions, duo, situations à toi · {missionsDone} mission{missionsDone > 1 ? "s" : ""} réussie{missionsDone > 1 ? "s" : ""}</span>
+          </span>
+          <span className="muted">›</span>
         </Link>
       </section>
 
@@ -102,32 +117,10 @@ export default async function Home() {
         </>
       )}
 
-      <h3>Toutes les séances</h3>
-      {themes.map((theme) => (
-        <details key={theme} className="theme-group" open={theme === next.theme}>
-          <summary>
-            {theme}{" "}
-            <span className="muted small">
-              {SCENARIOS.filter((x) => x.theme === theme && done.has(x.id)).length}/
-              {SCENARIOS.filter((x) => x.theme === theme).length}
-            </span>
-          </summary>
-          <ul className="list">
-            {SCENARIOS.filter((x) => x.theme === theme).map((x) => (
-              <li key={x.id}>
-                <Link href={`/session/${x.id}`}>
-                  <span className={`day ${done.has(x.id) ? "done" : ""}`}>{done.has(x.id) ? "✓" : x.level}</span>
-                  <span className="grow">
-                    <strong>{x.title}</strong>
-                    <span className="muted small">{x.titleFr}</span>
-                  </span>
-                  <span className="muted">›</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
+      <form action="/api/logout" method="post" className="center-small">
+        <button className="link small" type="submit">Se déconnecter</button>
+      </form>
+      <TabBar active="accueil" />
     </div>
   );
 }

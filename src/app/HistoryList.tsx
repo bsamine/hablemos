@@ -16,7 +16,11 @@ export default function HistoryList({ items, showTitle = true }: { items: Histor
               <strong>{showTitle ? h.title : frDate(h.startedAt)}</strong>
               <span className="muted small">
                 {showTitle && `${frDate(h.startedAt)} · `}
-                {minutes(h.durationS)} · {h.status === "done" ? `${h.wordsUsed} mots utilisés seule · ${h.errors} corrections` : BADGE[h.status]}
+                {minutes(h.durationS)} · {h.status !== "done"
+                  ? BADGE[h.status]
+                  : h.interviewScore !== null
+                    ? `note ${h.interviewScore}/5 · ${h.errors} corrections`
+                    : `${h.wordsUsed} mots utilisés seule · ${h.errors} corrections`}
               </span>
             </span>
             <span className="muted">›</span>

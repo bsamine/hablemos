@@ -1,6 +1,7 @@
 import { db, type SessionRow } from "./db";
 import { generateJson } from "./gemini";
 import { applyFeedback, knownErrors } from "./learning";
+import { addMission } from "./missions";
 import { sessionSpec } from "./modes";
 import { addFacts, getProfile, listFacts } from "./profile";
 import { buildDebriefPrompt, type Feedback } from "./prompts";
@@ -46,6 +47,7 @@ async function run(row: SessionRow, turns: Turn[]) {
     if (!spec) throw new Error("séance inconnue");
     const transcript = turns.map((t) => `${t.role === "learner" ? "L" : "T"}: ${t.text.trim()}`).join("\n");
     const prompt = buildDebriefPrompt({
+      mode: spec.mode,
       level: getProfile().level,
       knownErrors: knownErrors(),
       knownFacts: listFacts().map((f) => f.text),
@@ -61,6 +63,7 @@ async function run(row: SessionRow, turns: Turn[]) {
       .run(JSON.stringify(fb), row.id);
     applyFeedback(row.id, spec.words, fb);
     if (Array.isArray(fb.learner_facts)) addFacts(fb.learner_facts, row.id);
+    if (fb.mission?.fr) addMission(fb.mission.fr, fb.mission.phrase_es ?? "", row.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`debrief ${row.id} failed:`, msg);

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import TabBar from "../TabBar";
 import { db, type WordRow } from "@/lib/db";
 import { MASTERED_STAGE } from "@/lib/learning";
 import { Say } from "../feedback/[id]/client";
@@ -11,7 +12,7 @@ export default async function Mots() {
   const words = db().prepare("SELECT * FROM words ORDER BY due_at ASC").all() as WordRow[];
   const now = new Date().toISOString();
   return (
-    <div className="stack">
+    <div className="stack with-tabbar">
       <header className="top">
         <Link href="/" className="link">‹ Accueil</Link>
         <span className="muted small">{words.length} mots</span>
@@ -33,6 +34,7 @@ export default async function Mots() {
           </li>
         ))}
       </ul>
+      <TabBar active={"lecons"} />
     </div>
   );
 }

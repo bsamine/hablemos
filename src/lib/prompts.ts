@@ -7,6 +7,8 @@ export type LearnerContext = {
   about: string;
   facts: string[];
   notes: { date: string; title: string; note: string }[];
+  mission?: { text: string; date: string };
+  missionsDone?: { text: string; note: string }[];
 };
 
 /** Language rules by level: Carla speaks one notch above, never far above. */
@@ -33,7 +35,17 @@ function learnerSection(l: LearnerContext): string {
   const notes = l.notes.length
     ? l.notes.map((n) => `- ${n.date} · ${n.title} : ${n.note}`).join("\n")
     : "- (c'est votre première séance)";
-  return `CE QUE TU SAIS D'ELLE (ta mémoire — utilise-la avec naturel, ne la récite jamais)
+  const missions = [
+    l.mission
+      ? `- Sa mission en cours (donnée le ${l.mission.date}) : « ${l.mission.text} ». Au début, demande-lui avec légèreté si elle a pu la faire ; si non, encourage-la sans insister.`
+      : "",
+    ...(l.missionsDone ?? []).map(
+      (m) => `- Elle a RÉUSSI sa mission « ${m.text} »${m.note ? ` (elle a écrit : « ${m.note} »)` : ""}. Félicite-la et demande-lui de te raconter, en espagnol.`,
+    ),
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `${missions ? `MISSIONS DANS LA VRAIE VIE\n${missions}\n\n` : ""}CE QUE TU SAIS D'ELLE (ta mémoire — utilise-la avec naturel, ne la récite jamais)
 - Prénom : ${l.name || "(inconnu — demande-le au début et retiens-le)"}
 ${l.about ? `- Ce qu'elle a écrit sur elle : ${l.about}\n` : ""}${facts}
 
@@ -115,6 +127,7 @@ Commence maintenant : salue-la en espagnol${learner.name ? ` par son prénom (${
 }
 
 export function buildDebriefPrompt(opts: {
+  mode: string;
   level: string;
   knownErrors: string[];
   knownFacts: string[];
@@ -135,7 +148,11 @@ APPRENANTE
 - Ce que Carla sait déjà d'elle : ${opts.knownFacts.join(" ; ") || "rien"}
 
 SÉANCE : ${opts.title} — objectif : ${opts.taskGoal}
-
+${
+  opts.mode === "duo"
+    ? "ATTENTION : séance en DUO. Les tours L mélangent l'apprenante (débutante) et son partenaire (très bon niveau). N'analyse que les phrases de l'apprenante (phrases plus simples, hésitations, interpellée par son prénom) ; dans le doute, ignore la phrase.\n"
+    : ""
+}
 TRANSCRIPTION (L = apprenante, T = tutrice) :
 ${opts.transcript}
 
@@ -149,7 +166,16 @@ CONSIGNES
 - Ajoute jusqu'à 5 mots nouveaux utiles apparus dans la séance (pas déjà dans les listes).
 - learner_facts : jusqu'à 5 faits NOUVEAUX et durables sur sa vie qu'elle a dits elle-même (métier, ville, famille, goûts, projets, échéances), une ligne courte en français chacun. Rien qui soit déjà connu. Rien de sensible (santé, argent, intime). Liste vide si rien de nouveau.
 - memory_note : une phrase en français sur le contenu de la conversation (ce qu'elle a raconté, ce qui reste à suivre), pour que Carla puisse y revenir la prochaine fois.
-- Sois encourageant et concret. Pas de note sur 20.
+${
+  WANT_MISSION.has(opts.mode)
+    ? `- mission : UNE petite mission à faire dans la vraie vie d'ici la prochaine séance, liée à cette séance et à sa vie (ex. « Commande ton café en espagnol ce week-end », « Envoie un message vocal en espagnol à une amie »). Réaliste, faisable en 5 minutes, adaptée au niveau ${opts.level}. phrase_es = la phrase clé qu'elle pourra utiliser.`
+    : "- mission : null."
+}
+${
+  opts.mode === "interview"
+    ? "- interview : évalue l'entretien comme un recruteur bienveillant. 4 critères notés de 1 à 5 avec un commentaire court en français : « Clarté », « Lien avec l'offre », « Vocabulaire professionnel », « Assurance ». best_answer = sa meilleure réponse (résumée). to_improve = la question la plus ratée, sa réponse résumée, et une réponse modèle en espagnol à SON niveau qu'elle pourra apprendre. verdict_fr = une phrase.\n"
+    : "- interview : null.\n"
+}- Sois encourageant et concret. Pas de note sur 20.
 - Si la transcription est trop courte pour juger, dis-le dans summary_fr et laisse les listes vides.
 
 FORMAT DE SORTIE (JSON strict, rien d'autre) :
@@ -167,6 +193,13 @@ FORMAT DE SORTIE (JSON strict, rien d'autre) :
   "level_signals": { "estimated_cefr": "A1 | A2 | B1 | B2", "confidence": "low | medium | high", "evidence_fr": "..." },
   "learner_facts": ["..."],
   "memory_note": "...",
+  "mission": { "fr": "...", "phrase_es": "..." },
+  "interview": {
+    "criteria": [ { "name": "Clarté", "score": 1, "comment_fr": "..." } ],
+    "best_answer": "...",
+    "to_improve": { "question": "...", "her_answer": "...", "model_answer": "..." },
+    "verdict_fr": "..."
+  },
   "tomorrow_challenge": "une phrase à préparer pour la prochaine séance"
 }`;
 }
@@ -182,8 +215,18 @@ export type Feedback = {
   level_signals: { estimated_cefr: string; confidence: string; evidence_fr: string };
   learner_facts?: string[];
   memory_note?: string;
+  mission?: { fr: string; phrase_es: string } | null;
+  interview?: {
+    criteria: { name: string; score: number; comment_fr: string }[];
+    best_answer: string;
+    to_improve: { question: string; her_answer: string; model_answer: string };
+    verdict_fr: string;
+  } | null;
   tomorrow_challenge: string;
 };
+
+/** Modes that end with a real-life mission. */
+const WANT_MISSION = new Set(["scenario", "custom", "duo", "interview"]);
 
 export const ERROR_LABELS: Record<string, string> = {
   verb_conjugation: "Conjugaison",

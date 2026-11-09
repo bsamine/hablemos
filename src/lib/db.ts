@@ -45,6 +45,23 @@ export function db(): Db {
   `);
   conn.exec(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS job_ads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      company TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS missions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id INTEGER,
+      text TEXT NOT NULL,
+      phrase TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      done_at TEXT
+    );
     CREATE TABLE IF NOT EXISTS facts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       text TEXT NOT NULL,

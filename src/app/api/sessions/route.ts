@@ -3,6 +3,7 @@ import { isAuthed } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createLiveToken, LIVE_API_VERSION, LIVE_MODEL, liveConfig, VOICE } from "@/lib/gemini";
 import { dueWords, knownErrors } from "@/lib/learning";
+import { missionContext } from "@/lib/missions";
 import { buildSpec, type StartRequest } from "@/lib/modes";
 import { getProfile, listFacts, recentNotes } from "@/lib/profile";
 import { buildTutorPrompt } from "@/lib/prompts";
@@ -17,6 +18,7 @@ export async function POST(req: Request) {
   if (!spec) return NextResponse.json({ error: "Cette séance n'est pas disponible." }, { status: 400 });
 
   const profile = getProfile();
+  const missions = missionContext();
   const targetWordList = spec.words.map((w) => w.word);
   const review = spec.mode === "review" ? [] : dueWords(3).filter((w) => !targetWordList.includes(w.word));
   const systemInstruction = buildTutorPrompt({
@@ -29,6 +31,10 @@ export async function POST(req: Request) {
       about: profile.about,
       facts: listFacts().slice(0, 30).map((f) => f.text),
       notes: recentNotes(3),
+      mission: missions.pending
+        ? { text: missions.pending.text, date: missions.pending.created_at.slice(0, 10) }
+        : undefined,
+      missionsDone: missions.recentDone.map((m) => ({ text: m.text, note: m.note })),
     },
     now: new Date(),
   });

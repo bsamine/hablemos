@@ -441,3 +441,8 @@ export const SCENARIOS: Scenario[] = [
 export function getScenario(id: string): Scenario | undefined {
   return SCENARIOS.find((s) => s.id === id);
 }
+
+/** Interview lessons live in the Entretiens area; everything else is a lesson. */
+export const INTERVIEW_THEME = "Entretien d'embauche";
+export const LESSONS = SCENARIOS.filter((s) => s.theme !== INTERVIEW_THEME);
+export const INTERVIEW_LESSONS = SCENARIOS.filter((s) => s.theme === INTERVIEW_THEME);
