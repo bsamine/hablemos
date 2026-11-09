@@ -43,6 +43,13 @@ export function db(): Db {
       created_at TEXT NOT NULL
     );
   `);
+  for (const col of ["debrief_status TEXT", "debrief_error TEXT", "debrief_started_at TEXT"]) {
+    try {
+      conn.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
+    } catch {
+      /* column already exists */
+    }
+  }
   g.__hablemosDb = conn;
   return conn;
 }
@@ -57,6 +64,9 @@ export type SessionRow = {
   review_words: string;
   transcript: string | null;
   feedback: string | null;
+  debrief_status: "pending" | "done" | "error" | null;
+  debrief_error: string | null;
+  debrief_started_at: string | null;
 };
 
 export type WordRow = {

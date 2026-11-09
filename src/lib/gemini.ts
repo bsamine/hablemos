@@ -51,7 +51,8 @@ export async function createLiveToken(
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const isBusy = (msg: string) => /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand)\b/i.test(msg);
+const isBusy = (msg: string) =>
+  /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|aborted|timeout)\b/i.test(msg);
 
 /** Ask a text model for JSON. Each model gets one retry when busy, then the next model is tried. */
 export async function generateJson(prompt: string): Promise<unknown> {
@@ -61,7 +62,12 @@ export async function generateJson(prompt: string): Promise<unknown> {
     { model: m, wait: 0 },
     { model: m, wait: 2500 },
   ]);
+  const deadline = Date.now() + 150_000; // whole debrief: 2.5 min max
   for (const { model, wait } of attempts) {
+    if (Date.now() > deadline) {
+      errors.push("temps total dépassé");
+      break;
+    }
     if (wait) {
       if (!isBusy(errors.at(-1) ?? "")) continue; // only retry the same model when it was busy
       await sleep(wait);
@@ -70,7 +76,12 @@ export async function generateJson(prompt: string): Promise<unknown> {
       const res = await ai.models.generateContent({
         model,
         contents: prompt,
-        config: { responseMimeType: "application/json", temperature: 0.3, maxOutputTokens: 8192 },
+        config: {
+          responseMimeType: "application/json",
+          temperature: 0.3,
+          maxOutputTokens: 8192,
+          abortSignal: AbortSignal.timeout(50_000), // a stuck call must not block the debrief
+        },
       });
       const text = res.text ?? "";
       const start = text.indexOf("{");

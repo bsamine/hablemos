@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import { history } from "@/lib/history";
 import { doneScenarioIds, stats } from "@/lib/learning";
+import HistoryList from "./HistoryList";
 import { SCENARIOS } from "@/lib/scenarios";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +12,7 @@ export default async function Home() {
   const s = stats();
   const done = doneScenarioIds();
   const next = SCENARIOS.find((x) => !done.has(x.id)) ?? SCENARIOS[0];
+  const recent = history({ limit: 3 });
 
   return (
     <div className="stack">
@@ -32,6 +35,16 @@ export default async function Home() {
         <p className="muted">{next.titleFr}</p>
         <span className="primary pill">Parler avec Lucía →</span>
       </Link>
+
+      {recent.length > 0 && (
+        <>
+          <div className="top">
+            <h3>Mes derniers bilans</h3>
+            <Link href="/historique" className="link small">Tout voir ›</Link>
+          </div>
+          <HistoryList items={recent} />
+        </>
+      )}
 
       <h3>Toutes les séances</h3>
       <ul className="list">
