@@ -1,6 +1,6 @@
 import { db } from "./db";
 
-export type JobAd = { id: number; title: string; company: string; text: string; created_at: string };
+export type JobAd = { id: number; title: string; company: string; text: string; created_at: string; pack: string | null };
 
 export function addJobAd(title: string, company: string, text: string): number {
   const info = db()

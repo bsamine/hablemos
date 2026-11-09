@@ -15,7 +15,7 @@ export default async function Entretiens({ searchParams }: { searchParams: Promi
   const { e } = await searchParams;
   const ads = listJobAds();
   const done = doneScenarioIds();
-  const past = history({ modes: ["interview"], limit: 10 });
+  const past = history({ modes: ["interview", "dele"], limit: 10 });
   const scored = past.filter((p) => p.interviewScore !== null);
   const avg = scored.length ? Math.round((scored.reduce((a, p) => a + (p.interviewScore ?? 0), 0) / scored.length) * 10) / 10 : null;
 
@@ -66,7 +66,8 @@ export default async function Entretiens({ searchParams }: { searchParams: Promi
                   <strong>{a.title}</strong>
                   <span className="muted small">{a.company ? `${a.company} · ` : ""}ajoutée {frDate(a.created_at)}</span>
                 </span>
-                <Link className="primary pill" href={`/pratique/entretien?offre=${a.id}`}>S'entraîner</Link>
+                <Link className="secondary pill" href={`/entretiens/offre/${a.id}`}>{a.pack ? "Dossier" : "Préparer"}</Link>
+                <Link className="primary pill" href={`/pratique/entretien?offre=${a.id}`}>Simuler</Link>
                 <form action="/api/offres" method="post">
                   <input type="hidden" name="delete" value={a.id} />
                   <button className="link small" type="submit" aria-label="Supprimer l'offre">✕</button>
@@ -76,6 +77,18 @@ export default async function Entretiens({ searchParams }: { searchParams: Promi
           </ul>
         </section>
       )}
+
+      <section className="card stack">
+        <p className="eyebrow">🎓 Diplôme : simulacre d'oral du DELE</p>
+        <p className="muted small">
+          Une épreuve orale d'entraînement inspirée du format du DELE, avec préparation chronométrée et note indicative par
+          tâche. Le DELE est le diplôme officiel d'espagnol, utile sur un CV.
+        </p>
+        <div className="row">
+          <Link href="/pratique/dele?niveau=A2" className="secondary">DELE A2</Link>
+          <Link href="/pratique/dele?niveau=B1" className="secondary">DELE B1</Link>
+        </div>
+      </section>
 
       <section className="stack">
         <h3>Leçons d'entretien</h3>

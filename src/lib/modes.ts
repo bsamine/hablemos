@@ -1,11 +1,24 @@
 import { db, type SessionRow, type WordRow } from "./db";
+import { getEvent, type Pocket } from "./events";
 import { getJobAd } from "./jobs";
 import { getProfile } from "./profile";
 import { dueWords } from "./learning";
 import type { Feedback } from "./prompts";
 import { getScenario, SCENARIOS, type Scenario, type TargetWord } from "./scenarios";
 
-export type Mode = "scenario" | "redo" | "review" | "custom" | "interview" | "duo" | "shadowing";
+export type Mode =
+  | "scenario"
+  | "redo"
+  | "review"
+  | "custom"
+  | "interview"
+  | "duo"
+  | "shadowing"
+  | "prep"
+  | "story"
+  | "picture"
+  | "checkup"
+  | "dele";
 
 /** Which area of the app a mode belongs to. */
 export const AREA: Record<Mode, "lecons" | "entretiens" | "vie-reelle"> = {
@@ -16,6 +29,11 @@ export const AREA: Record<Mode, "lecons" | "entretiens" | "vie-reelle"> = {
   interview: "entretiens",
   custom: "vie-reelle",
   duo: "vie-reelle",
+  prep: "vie-reelle",
+  story: "lecons",
+  picture: "lecons",
+  checkup: "lecons",
+  dele: "entretiens",
 };
 
 /** Everything a live session needs; stored with the session so the debrief and history can use it. */
@@ -25,6 +43,10 @@ export type SessionSpec = {
   fromSessionId?: number;
   jobAdId?: number;
   duoGame?: string;
+  eventId?: number;
+  episode?: number;
+  sceneId?: string;
+  deleLevel?: string;
   title: string; // shown in Spanish
   titleFr: string;
   taskGoal: string; // French, read by the learner and the tutor
@@ -43,7 +65,12 @@ export type StartRequest =
   | { mode: "custom"; topic: string }
   | { mode: "interview"; jobAdId: number }
   | { mode: "duo"; game: string }
-  | { mode: "shadowing" };
+  | { mode: "shadowing" }
+  | { mode: "prep"; eventId: number }
+  | { mode: "story" }
+  | { mode: "picture"; sceneId?: string }
+  | { mode: "checkup" }
+  | { mode: "dele"; level: string };
 
 const defaultMinutes = () => Number(process.env.SESSION_MINUTES ?? 15);
 
@@ -144,6 +171,180 @@ export function customSpec(topic: string): SessionSpec | null {
 3. Jeu de rôle (6-8 min) : joue le personnage de façon réaliste, en espagnol d'Espagne. Fais-lui utiliser les 5 mots.
 4. Refaire (1 min) : fais-lui redire la phrase la plus utile de la situation, d'un trait.
 5. Fin : quand elle dit "fin de la sesión" ou après environ ${minutes} minutes, félicite-la en français et dis-lui que son bilan s'affiche à l'écran.`,
+  };
+}
+
+// ---------- Telenovela ----------
+
+/** Interactive audio series: she is the main character and steers the plot by speaking. */
+export function storySpec(): SessionSpec {
+  const p = getProfile();
+  const prev = db()
+    .prepare("SELECT feedback FROM sessions WHERE mode = 'story' AND feedback IS NOT NULL ORDER BY started_at ASC")
+    .all() as { feedback: string }[];
+  const episode = prev.length + 1;
+  const recap = prev
+    .slice(-4)
+    .map((r, i) => `Épisode ${episode - Math.min(prev.length, 4) + i} : ${(JSON.parse(r.feedback) as Feedback).memory_note ?? ""}`)
+    .join("\n");
+  const due: WordRow[] = dueWords(5);
+  const hero = p.name || "la protagoniste";
+  return {
+    mode: "story",
+    episode,
+    title: `Telenovela · Episodio ${episode}`,
+    titleFr: "Una farmacéutica en Madrid",
+    taskGoal: `Vivre l'épisode ${episode} de la série dont tu es l'héroïne, et décider de la suite en parlant.`,
+    persona: "Carla, narratrice et tous les personnages",
+    focus: "écoute et décisions à l'oral",
+    words: due.map((w) => ({ word: w.word, fr: w.translation, example: w.example })),
+    minutes: 10,
+    plan: `Tu es la NARRATRICE d'une telenovela audio, « Una farmacéutica en Madrid », dont l'héroïne est ${hero} elle-même : une pharmacienne française qui commence une nouvelle vie à Madrid. Ton ton : chaleureux, drôle, un peu dramatique, comme une vraie série.
+${episode === 1 ? "C'est le PREMIER épisode : présente l'héroïne, son arrivée à Madrid et 2 personnages récurrents (une voisine bavarde, un collègue mystérieux)." : `RÉSUMÉ DES ÉPISODES PRÉCÉDENTS (garde la continuité, reprends les mêmes personnages) :\n${recap}`}
+
+DÉROULÉ (environ 10 min) :
+1. « Previously… » : 2 phrases de rappel en espagnol simple (ou de présentation pour l'épisode 1).
+2. Raconte l'épisode en courtes scènes (3-4 phrases à la fois, niveau ${p.level}), avec des voix de personnages variées. Glisse les mots à réviser dans l'histoire.
+3. À 3 moments clés, arrête-toi et demande-lui de DÉCIDER en espagnol ce que fait l'héroïne (« ¿Qué haces? ¿Aceptas la invitación o no? ») ou de répondre à un personnage. Sa réponse change vraiment la suite.
+4. Corrige ses erreurs importantes très brièvement, sans casser la magie (« Casi : se dice… ¡Sigamos! »).
+5. Termine sur un cliffhanger en espagnol, puis en français : « Fin de l'épisode ${episode}. Ton bilan s'affiche à l'écran. »`,
+  };
+}
+
+// ---------- Describe the picture ----------
+
+export const SCENES: { id: string; title: string; titleFr: string; prompt: string; description: string; level: string }[] = [
+  { id: "mercado", title: "En el mercado", titleFr: "Au marché", level: "A1", prompt: "A lively covered food market in Madrid, fruit and vegetable stalls, a smiling vendor weighing tomatoes, a young woman with a tote bag, an old man with a cap, warm morning light", description: "Un marché couvert à Madrid : étals de fruits et légumes, une vendeuse qui pèse des tomates, une jeune femme avec un sac en tissu, un vieil homme avec une casquette, lumière du matin." },
+  { id: "farmacia", title: "En la farmacia", titleFr: "À la pharmacie", level: "A1", prompt: "Inside a modern Spanish pharmacy with a green cross sign, a pharmacist in a white coat behind the counter talking to an elderly lady, shelves of products, a mother with a child waiting", description: "Une pharmacie espagnole moderne : une pharmacienne en blouse blanche au comptoir parle avec une dame âgée, des étagères de produits, une mère et son enfant qui attendent." },
+  { id: "terraza", title: "Una terraza", titleFr: "Une terrasse", level: "A1", prompt: "A sunny café terrace on a Madrid square, friends sharing tapas and drinks, a waiter carrying a tray, a dog under a table, people walking by", description: "Une terrasse ensoleillée sur une place de Madrid : des amis partagent des tapas, un serveur porte un plateau, un chien sous une table, des passants." },
+  { id: "metro", title: "En el metro", titleFr: "Dans le métro", level: "A2", prompt: "Madrid metro platform at rush hour, people waiting, a man reading a newspaper, a student with headphones, a woman checking the map, a train arriving", description: "Un quai du métro de Madrid à l'heure de pointe : un homme lit le journal, une étudiante avec un casque, une femme regarde le plan, un train arrive." },
+  { id: "parque", title: "El Retiro un domingo", titleFr: "Le Retiro un dimanche", level: "A2", prompt: "Retiro park in Madrid on a Sunday, rowing boats on the lake, families picnicking on the grass, a street musician playing guitar, joggers, autumn trees", description: "Le parc du Retiro un dimanche : des barques sur le lac, des familles qui pique-niquent, un musicien qui joue de la guitare, des joggeurs, des arbres d'automne." },
+  { id: "oficina", title: "Una reunión", titleFr: "Une réunion", level: "B1", prompt: "A modern office meeting room, five colleagues around a table, one woman presenting a chart on a screen, laptops and coffee cups, one person looking at their phone", description: "Une salle de réunion moderne : cinq collègues autour d'une table, une femme présente un graphique à l'écran, des ordinateurs et des cafés, une personne regarde son téléphone." },
+  { id: "cocina", title: "Cocinar en casa", titleFr: "Cuisiner à la maison", level: "A2", prompt: "A cozy home kitchen, a couple cooking together, a pan of paella on the stove, vegetables on a cutting board, a recipe on a tablet, evening light", description: "Une cuisine chaleureuse : un couple cuisine ensemble, une paella sur le feu, des légumes sur une planche, une recette sur une tablette, lumière du soir." },
+  { id: "estacion", title: "En la estación", titleFr: "À la gare", level: "A2", prompt: "Atocha train station in Madrid with its tropical garden, travelers with suitcases, a departures board, a couple saying goodbye, a ticket machine", description: "La gare d'Atocha à Madrid avec son jardin tropical : des voyageurs avec des valises, un panneau des départs, un couple qui se dit au revoir, un distributeur de billets." },
+];
+
+/** She describes a generated scene; Carla knows what is in it and asks questions. */
+export function pictureSpec(sceneId?: string): SessionSpec | null {
+  const seen = new Set(
+    (db().prepare("SELECT spec FROM sessions WHERE mode = 'picture' AND transcript IS NOT NULL").all() as { spec: string }[]).map(
+      (r) => (JSON.parse(r.spec) as SessionSpec).sceneId,
+    ),
+  );
+  const scene = SCENES.find((x) => x.id === sceneId) ?? SCENES.find((x) => !seen.has(x.id)) ?? SCENES[0];
+  return {
+    mode: "picture",
+    sceneId: scene.id,
+    title: `Describe: ${scene.title}`,
+    titleFr: `Décrire l'image · ${scene.titleFr}`,
+    taskGoal: "Décrire l'image à Carla : qui, où, ce que font les gens, ce qu'ils ressentent, puis imaginer la suite.",
+    persona: "Carla, sa professeure",
+    focus: "décrire, hay, estar + gerundio",
+    words: [],
+    minutes: 7,
+    plan: `Elle regarde une image sur son écran. Toi tu ne la vois pas, mais voici exactement ce qu'elle montre : ${scene.description}
+1. Explique en une phrase en français : elle décrit l'image, tu poses des questions.
+2. Donne 4 outils utiles, un par un, et fais-les répéter : « En la imagen hay… », « A la izquierda / a la derecha… », « Está + gerundio (está comprando) », « Parece que… ».
+3. Elle décrit. Pose des questions précises sur des détails réels de l'image (« ¿Qué lleva el señor? ¿Qué está haciendo la vendedora? »). Si elle invente un détail absent, dis-le gentiment.
+4. Puis imaginez ensemble : « ¿Qué va a pasar después? ¿Quiénes son? ».
+5. Fin : félicite-la en français et dis-lui que son bilan s'affiche à l'écran.`,
+  };
+}
+
+// ---------- Monthly level check ----------
+
+export function checkupSpec(): SessionSpec {
+  const { level } = getProfile();
+  return {
+    mode: "checkup",
+    title: "Bilan de niveau",
+    titleFr: "Le check-up du mois",
+    taskGoal: "Un court test oral en 4 parties pour mesurer ton niveau ce mois-ci et voir tes progrès.",
+    persona: "Carla, examinatrice bienveillante",
+    focus: "évaluation",
+    words: [],
+    minutes: 12,
+    plan: `Tu fais passer un BILAN DE NIVEAU oral d'environ 10 minutes, bienveillant mais rigoureux. Niveau déclaré : ${level}. Ne corrige PAS pendant le test (tu corrigeras à la fin) : ton rôle est d'évaluer.
+Explique en français : « 4 petites parties, je ne corrige pas pendant, détends-toi. »
+1. Présentation (2 min) : qui elle est, sa vie, son travail. Relances simples.
+2. Description (2 min) : sa maison, son quartier ou une personne qu'elle aime.
+3. Interaction (3 min) : un mini jeu de rôle du quotidien adapté au niveau (au restaurant, à la pharmacie, prendre rendez-vous).
+4. Opinion / récit (3 min) : ${level === "A1" ? "ce qu'elle aime et n'aime pas" : level === "A2" ? "raconter son dernier week-end ou un souvenir" : "donner son avis sur un sujet de société simple et justifier"}.
+Pour chaque partie, monte légèrement la difficulté si elle s'en sort bien, pour trouver son vrai plafond.
+Fin : en français, 2 points forts et le point prioritaire à travailler. Dis-lui que sa carte de niveau s'affiche à l'écran.`,
+  };
+}
+
+// ---------- DELE-style oral exam ----------
+
+export function deleSpec(level: string): SessionSpec | null {
+  if (level !== "A2" && level !== "B1") return null;
+  const a2 = level === "A2";
+  return {
+    mode: "dele",
+    deleLevel: level,
+    title: `Simulacro DELE ${level} · oral`,
+    titleFr: `Entraînement à l'oral du DELE ${level}`,
+    taskGoal: `Passer une épreuve orale inspirée du format du DELE ${level}, avec un temps de préparation et une note indicative.`,
+    persona: "une examinatrice officielle, cordiale et neutre",
+    focus: "examen",
+    words: [],
+    minutes: 15,
+    plan: `Tu es l'examinatrice d'un SIMULACRE d'épreuve orale inspirée du DELE ${level} (format simplifié pour l'entraînement ; dis-le au début, en français). Reste neutre et cordiale comme une vraie examinatrice. Ne corrige pas pendant l'épreuve.
+${
+  a2
+    ? `Tarea 1 — Monólogo (2-3 min) : propose 2 sujets (ex. « Tu ciudad », « Tus vacaciones ») ; elle en choisit un, tu lui laisses 1 minute pour réfléchir (dis « Tiene un minuto para prepararse », puis attends qu'elle dise « listo »), puis elle parle sans interruption.
+Tarea 2 — Descripción (2 min) : décris oralement une scène simple qu'elle doit imaginer (« Imagine una foto: una familia en un parque… ») et demande-lui de la décrire et d'imaginer qui sont ces personnes.
+Tarea 3 — Diálogo (3 min) : jeu de rôle en situation (tu es employée d'une agence de voyages ou d'un magasin), elle doit obtenir une information et réagir.
+Tarea 4 — Conversación (2 min) : questions personnelles liées aux tâches précédentes.`
+    : `Tarea 1 — Presentación (2-3 min) : propose 2 sujets d'opinion (ex. « El teletrabajo », « Vivir en el extranjero ») ; 1 minute de préparation (attends « listo »), puis exposé avec introduction, opinion, exemple, conclusion.
+Tarea 2 — Conversación sobre la presentación (3 min) : pose des questions qui la font justifier et nuancer.
+Tarea 3 — Descripción de una situación (3 min) : décris une scène à imaginer (« una reunión de trabajo con un problema ») ; elle décrit, interprète et imagine la suite.
+Tarea 4 — Situación simulada (3 min) : jeu de rôle avec un petit conflit à résoudre (réclamation, changement de rendez-vous).`
+}
+Annonce chaque tâche clairement en espagnol (« Tarea 1 ») avec la consigne. Garde le rythme et le minutage.
+Fin : sors du rôle et, en français, dis-lui que sa note indicative et les conseils s'affichent à l'écran.`,
+  };
+}
+
+/** Dress rehearsal of a real moment coming up in her week. */
+export function prepSpec(eventId: number): SessionSpec | null {
+  const ev = getEvent(eventId);
+  if (!ev) return null;
+  const when = new Date(ev.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  if (ev.job_ad_id) {
+    const base = interviewSpec(ev.job_ad_id);
+    if (base)
+      return {
+        ...base,
+        mode: "prep",
+        eventId,
+        title: `Répétition : ${ev.title}`,
+        titleFr: `Répétition générale avant le ${when}`,
+        plan: `C'est la RÉPÉTITION GÉNÉRALE de son vrai entretien, prévu ${when}. Rends-le aussi réaliste que possible.\n\n${base.plan}`,
+      };
+  }
+  const pocket: Pocket | null = ev.pocket ? JSON.parse(ev.pocket) : null;
+  const words = (pocket?.phrases ?? []).map((p) => ({ word: p.es, fr: p.fr, example: "" }));
+  return {
+    mode: "prep",
+    eventId,
+    title: `Répétition : ${ev.title}`,
+    titleFr: `Répétition générale avant le ${when}`,
+    taskGoal: `Se préparer au moment réel « ${ev.title} » (${when}) en le jouant deux fois avec Carla.`,
+    persona: "les personnes qu'elle va rencontrer",
+    focus: "préparation d'un moment réel",
+    words,
+    minutes: 10,
+    plan: `C'est la répétition générale d'un VRAI moment de sa vie, prévu ${when} : « ${ev.title} ».
+Contexte qu'elle a donné : ${ev.details || "aucun détail"}.
+${pocket ? `Sa carte de poche (phrases à lui faire utiliser) : ${pocket.phrases.map((p) => p.es).join(" / ")}. Sa première phrase prévue : « ${pocket.opener_es} ».` : "Choisis toi-même les 5 phrases les plus utiles et présente-les au début."}
+
+1. En une phrase en français, dis-lui que vous allez répéter ce moment deux fois, et demande-lui ce qui l'inquiète le plus.
+2. Premier passage (avec aide) : joue la ou les personnes réalistes de cette situation. Aide-la, corrige comme d'habitude.
+3. Ajoute UN imprévu réaliste (tu parles trop vite, tu poses une question inattendue, il manque quelque chose) pour qu'elle utilise une phrase de secours.
+4. Second passage (sans aide) : rejoue le moment d'un trait, sans corriger pendant ; corrige seulement à la fin, les 2 points les plus importants.
+5. Fin : en français, encourage-la pour le jour J en une phrase et rappelle-lui de raconter ensuite comment ça s'est passé dans l'appli.`,
   };
 }
 
@@ -250,17 +451,23 @@ RÈGLES DU DUO :
   };
 }
 
-/** Repeat-after-me practice on sentences she already met. */
-export function shadowingSpec(): SessionSpec | null {
+/** Sentences she already met (her words' examples), topped up from lessons at her level. */
+export function practiceSentences(n = 8): string[] {
   const { level } = getProfile();
   const rows = db()
-    .prepare("SELECT * FROM words WHERE example <> '' ORDER BY due_at ASC LIMIT 8")
-    .all() as WordRow[];
+    .prepare("SELECT * FROM words WHERE example <> '' ORDER BY due_at ASC LIMIT ?")
+    .all(n) as WordRow[];
   let sentences = rows.map((w) => w.example);
   if (sentences.length < 5) {
     const extra = getScenarioPool(level).flatMap((s) => s.words.map((w) => w.example)).filter(Boolean);
-    sentences = [...new Set([...sentences, ...extra])].slice(0, 8);
+    sentences = [...new Set([...sentences, ...extra])].slice(0, n);
   }
+  return sentences;
+}
+
+/** Repeat-after-me practice on sentences she already met. */
+export function shadowingSpec(): SessionSpec | null {
+  const sentences = practiceSentences(8);
   if (!sentences.length) return null;
   return {
     mode: "shadowing",
@@ -296,6 +503,16 @@ export function buildSpec(req: StartRequest): SessionSpec | null {
       return duoSpec(String(req.game ?? ""));
     case "shadowing":
       return shadowingSpec();
+    case "prep":
+      return prepSpec(Number(req.eventId));
+    case "story":
+      return storySpec();
+    case "picture":
+      return pictureSpec(req.sceneId);
+    case "checkup":
+      return checkupSpec();
+    case "dele":
+      return deleSpec(String(req.level));
     case "scenario": {
       const s = getScenario(req.scenarioId);
       return s ? scenarioSpec(s) : null;

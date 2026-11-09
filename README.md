@@ -34,6 +34,29 @@ src/app/api/n8n/summary   JSON for automations (reminders, weekly summary, alert
 scripts/backup.sh      daily DB backup (cron installed by deploy.sh)
 ```
 
+## Changelog
+
+### v0.1.1 — « Vivir en español »
+- **Faster, more patient Carla.** The session is prepared while you read the intro, so "Commencer" only has to connect. Turn-taking is tuned for learners: Carla waits longer before answering at A1/A2, so she doesn't cut you off while you look for a word. You can choose her voice on the Profile page.
+- **The Before / During / After loop:**
+  - Add an upcoming real moment.
+  - Rehearse it with Carla (with a surprise twist), and get a pocket card with 5 phrases and your first sentence.
+  - Afterwards, tell Carla by voice how it went; what you couldn't say becomes new words.
+- **Missing-words journal (carnet).** 30 seconds to say what you couldn't say, and Carla gives you the Spanish.
+- **Interview pack per job ad:** what the recruiter wants, a checklist, the 10 likely questions with model answers, a cheat sheet and questions to ask.
+- **Living curriculum.** "Ta semaine avec Carla" is built from your moments, errors and missing words.
+- **Voice diary, grammar cards, coach corner.**
+  - Voice diary: 1 minute a day, with a written reply.
+  - Grammar cards: one per recurring error.
+  - Coach corner: a weekly note for your partner.
+- **Immersion:** a telenovela where you're the heroine, describe a generated picture, a daily micro-podcast with a quiz, and a per-word pronunciation score.
+- **Milestones:** a monthly level check with a level card, and a practice oral exam inspired by the DELE A2/B1 format, with an indicative score.
+- **n8n:** `/api/n8n/summary` now also returns ready-to-send `messages.reminder_fr` and `messages.sunday_fr`.
+- Voice notes are stored in `data/audio` and kept 60 days. Generated scene images are cached in `data/images`.
+
+### v0.1.0
+First pilot: themed voice lessons with Carla, background feedback with history, memory, missions, duo mode and interviews from job ads.
+
 ## 1. Gemini API key
 
 1. Go to [Google AI Studio](https://aistudio.google.com/apikey) and create an API key.

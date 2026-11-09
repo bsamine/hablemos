@@ -4,7 +4,12 @@ import { requireAuth } from "@/lib/auth";
 import {
   customSpec,
   duoSpec,
+  checkupSpec,
+  deleSpec,
   interviewSpec,
+  pictureSpec,
+  prepSpec,
+  storySpec,
   redoSpec,
   reviewSpec,
   shadowingSpec,
@@ -29,7 +34,7 @@ export default async function Pratique({
   searchParams,
 }: {
   params: Promise<{ mode: string }>;
-  searchParams: Promise<{ from?: string; sujet?: string; offre?: string; jeu?: string }>;
+  searchParams: Promise<{ from?: string; sujet?: string; offre?: string; jeu?: string; event?: string; scene?: string; niveau?: string }>;
 }) {
   await requireAuth();
   const { mode } = await params;
@@ -62,13 +67,37 @@ export default async function Pratique({
     spec = duoSpec(String(q.jeu));
     start = { mode: "duo", game: String(q.jeu) };
     empty = "Choisis un jeu dans l'onglet Vie réelle.";
+  } else if (mode === "prep") {
+    spec = prepSpec(Number(q.event));
+    start = { mode: "prep", eventId: Number(q.event) };
+    empty = "Moment introuvable.";
+  } else if (mode === "histoire") {
+    spec = storySpec();
+    start = { mode: "story" };
+  } else if (mode === "image") {
+    spec = pictureSpec(q.scene);
+    start = { mode: "picture", sceneId: spec?.sceneId };
+  } else if (mode === "bilan") {
+    spec = checkupSpec();
+    start = { mode: "checkup" };
+  } else if (mode === "dele") {
+    spec = deleSpec(String(q.niveau ?? "A2"));
+    start = { mode: "dele", level: String(q.niveau ?? "A2") };
+    empty = "Niveau DELE non disponible (A2 ou B1).";
   } else if (mode === "shadowing") {
     spec = shadowingSpec();
     start = { mode: "shadowing" };
     empty = "Fais d'abord une leçon : le shadowing utilise tes phrases.";
   } else notFound();
 
-  const back = mode === "entretien" ? "/entretiens" : mode === "duo" || mode === "theme" ? "/vie-reelle" : "/lecons";
+  const back =
+    mode === "entretien" || mode === "dele"
+      ? "/entretiens"
+      : mode === "prep"
+        ? `/moment/${q.event}`
+        : mode === "duo" || mode === "theme"
+          ? "/vie-reelle"
+          : "/lecons";
 
   return (
     <div className="stack">
@@ -87,7 +116,13 @@ export default async function Pratique({
               title: spec.title,
               taskGoal: spec.taskGoal,
               words: spec.words,
-              wordsLabel: mode === "revision" ? "Les mots à retrouver (cache-les si tu veux jouer !)" : undefined,
+              wordsLabel:
+                mode === "revision"
+                  ? "Les mots à retrouver (cache-les si tu veux jouer !)"
+                  : mode === "histoire"
+                    ? "Mots à réviser cachés dans l'épisode"
+                    : undefined,
+              image: spec.sceneId ? `/api/scene/${spec.sceneId}` : undefined,
             }}
             start={start}
           />

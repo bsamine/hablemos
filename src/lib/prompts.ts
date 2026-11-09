@@ -175,6 +175,18 @@ ${
   opts.mode === "interview"
     ? "- interview : évalue l'entretien comme un recruteur bienveillant. 4 critères notés de 1 à 5 avec un commentaire court en français : « Clarté », « Lien avec l'offre », « Vocabulaire professionnel », « Assurance ». best_answer = sa meilleure réponse (résumée). to_improve = la question la plus ratée, sa réponse résumée, et une réponse modèle en espagnol à SON niveau qu'elle pourra apprendre. verdict_fr = une phrase.\n"
     : "- interview : null.\n"
+}${
+  opts.mode === "story"
+    ? "- memory_note : résume l'intrigue de cet épisode et LES DÉCISIONS qu'elle a prises (2-3 phrases), pour que le prochain épisode continue l'histoire.\n"
+    : ""
+}${
+  opts.mode === "checkup"
+    ? "- checkup : sa carte de niveau. level = niveau CECRL estimé (A1, A1+, A2, A2+, B1, B1+, B2). can_do_fr = 4 choses qu'elle sait faire à l'oral (« Je peux… »). focus_fr = les 2 priorités du mois prochain. comment_fr = une phrase de bilan.\n"
+    : "- checkup : null.\n"
+}${
+  opts.mode === "dele"
+    ? "- dele : évalue comme un examinateur du DELE, de façon indicative. tasks = une note de 1 à 5 par tâche réalisée avec un commentaire court. overall = « Probablement apte », « Presque » ou « À renforcer ». advice_fr = 3 conseils concrets pour le jour de l'examen.\n"
+    : "- dele : null.\n"
 }- Sois encourageant et concret. Pas de note sur 20.
 - Si la transcription est trop courte pour juger, dis-le dans summary_fr et laisse les listes vides.
 
@@ -200,6 +212,8 @@ FORMAT DE SORTIE (JSON strict, rien d'autre) :
     "to_improve": { "question": "...", "her_answer": "...", "model_answer": "..." },
     "verdict_fr": "..."
   },
+  "checkup": { "level": "A2", "can_do_fr": ["..."], "focus_fr": ["..."], "comment_fr": "..." },
+  "dele": { "tasks": [ { "name": "Tarea 1", "score": 1, "comment_fr": "..." } ], "overall": "...", "advice_fr": ["..."] },
   "tomorrow_challenge": "une phrase à préparer pour la prochaine séance"
 }`;
 }
@@ -222,11 +236,13 @@ export type Feedback = {
     to_improve: { question: string; her_answer: string; model_answer: string };
     verdict_fr: string;
   } | null;
+  checkup?: { level: string; can_do_fr: string[]; focus_fr: string[]; comment_fr: string } | null;
+  dele?: { tasks: { name: string; score: number; comment_fr: string }[]; overall: string; advice_fr: string[] } | null;
   tomorrow_challenge: string;
 };
 
 /** Modes that end with a real-life mission. */
-const WANT_MISSION = new Set(["scenario", "custom", "duo", "interview"]);
+const WANT_MISSION = new Set(["scenario", "custom", "duo", "interview", "story", "picture"]);
 
 export const ERROR_LABELS: Record<string, string> = {
   verb_conjugation: "Conjugaison",

@@ -41,7 +41,11 @@ export async function POST(req: Request) {
 
   let token: string;
   try {
-    token = await createLiveToken(LIVE_API_VERSION, LIVE_MODEL, liveConfig(systemInstruction));
+    token = await createLiveToken(
+      LIVE_API_VERSION,
+      LIVE_MODEL,
+      liveConfig(systemInstruction, { voice: profile.voice, level: profile.level }),
+    );
   } catch (e) {
     console.error("token error", e);
     return NextResponse.json({ error: "Impossible de contacter Gemini. Vérifie la clé API." }, { status: 502 });

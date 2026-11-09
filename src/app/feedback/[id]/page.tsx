@@ -68,6 +68,39 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
         <p>{fb.summary_fr}</p>
       </div>
 
+      {fb.checkup?.level ? (
+        <section className="card level-card">
+          <p className="eyebrow">Ta carte de niveau · {frDate(row.started_at)}</p>
+          <p className="level-big">{fb.checkup.level}</p>
+          <p>{fb.checkup.comment_fr}</p>
+          <p className="eyebrow">Je peux…</p>
+          <ul>{fb.checkup.can_do_fr.map((c, i) => <li key={i}>{c}</li>)}</ul>
+          <p className="eyebrow">Mes priorités du mois</p>
+          <ul>{fb.checkup.focus_fr.map((c, i) => <li key={i}>{c}</li>)}</ul>
+        </section>
+      ) : null}
+
+      {fb.dele?.tasks?.length ? (
+        <section className="card scorecard">
+          <p className="eyebrow">Note indicative · {spec?.title}</p>
+          <p><strong>{fb.dele.overall}</strong></p>
+          <ul>
+            {fb.dele.tasks.map((t) => {
+              const sc = Math.max(0, Math.min(5, Math.round(t.score)));
+              return (
+                <li key={t.name}>
+                  <span className="grow"><strong>{t.name}</strong><span className="muted small">{t.comment_fr}</span></span>
+                  <span className="score">{"●".repeat(sc)}{"○".repeat(5 - sc)}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="eyebrow">Pour le jour J</p>
+          <ul>{fb.dele.advice_fr.map((a, i) => <li key={i}>{a}</li>)}</ul>
+          <p className="muted small">Simulation d'entraînement inspirée du format du DELE : la note est indicative, pas officielle.</p>
+        </section>
+      ) : null}
+
       {fb.interview?.criteria?.length ? (
         <section className="card scorecard">
           <p className="eyebrow">Note de l'entretien</p>

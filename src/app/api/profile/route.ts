@@ -11,6 +11,7 @@ export async function POST(req: Request) {
   if (f.has("about")) p.about = String(f.get("about"));
   if (f.has("level")) p.level = String(f.get("level")) as Level;
   if (f.has("partner")) p.partner = String(f.get("partner"));
+  if (f.has("voice")) p.voice = String(f.get("voice"));
   saveProfile(p);
   const next = String(f.get("next") ?? "");
   return go(next.startsWith("/") ? next : "/profil?ok=1");

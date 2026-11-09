@@ -24,7 +24,11 @@ export type Preview = {
   taskGoal: string;
   words: TargetWord[];
   wordsLabel?: string;
+  image?: string;
 };
+
+/** Prepared sessions stay usable for 20 minutes (the token lives 30). */
+const PREPARED_TTL = 20 * 60_000;
 
 export default function Conversation({ preview, start }: { preview: Preview; start: StartRequest }) {
   const router = useRouter();
@@ -59,6 +63,23 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   }, [turns]);
 
   useEffect(() => () => void cleanup(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Prepare the session (Carla's prompt + Live token) while she reads the intro: tapping "Commencer" then only connects.
+  const preparedRef = useRef<{ at: number; p: Promise<{ ok: boolean; data: StartResponse & { error?: string } }> } | null>(null);
+  function prepare() {
+    preparedRef.current = {
+      at: Date.now(),
+      p: fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(start),
+      }).then(async (res) => ({ ok: res.ok, data: await res.json() })),
+    };
+    preparedRef.current.p.catch(() => {});
+  }
+  useEffect(() => {
+    prepare();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addText(role: Turn["role"], text: string) {
     if (!text) return;
@@ -157,13 +178,11 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
         sessionRef.current?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } }),
       );
 
-      const res = await fetch("/api/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(start),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Erreur serveur");
+      if (!preparedRef.current || Date.now() - preparedRef.current.at > PREPARED_TTL) prepare();
+      const prepared = preparedRef.current!;
+      preparedRef.current = null; // one use: a retry prepares a fresh session
+      const { ok, data } = await prepared.p;
+      if (!ok) throw new Error(data.error ?? "Erreur serveur");
       startRef.current = data as StartResponse;
       setLimit(data.minutes * 60);
 
@@ -238,6 +257,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   if (phase === "ready" || (phase === "error" && !startRef.current)) {
     return (
       <div className="stack">
+        {preview.image && <img src={preview.image} alt="La scène à décrire" className="scene" />}
         <section className="card carla-intro">
           <img src="/carla.svg" alt="" className="avatar" />
           <div>
@@ -295,6 +315,8 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
       {elapsed >= limit && live && (
         <p className="notice">C'est l'heure ! Dis « fin de la sesión » ou appuie sur Terminer.</p>
       )}
+
+      {preview.image && <img src={preview.image} alt="La scène à décrire" className="scene" />}
 
       <div className={`captions ${captions ? "" : "hidden-captions"}`} ref={scrollRef}>
         {captions ? (

@@ -12,5 +12,5 @@ export async function POST(req: Request) {
   const text = String(f.get("text") ?? "").trim();
   if (text.length < 40) return go("/entretiens?e=court#offre");
   const id = addJobAd(String(f.get("title") ?? ""), String(f.get("company") ?? ""), text);
-  return go(`/pratique/entretien?offre=${id}`);
+  return go(`/entretiens/offre/${id}`);
 }

@@ -2,7 +2,9 @@ import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import TabBar from "../TabBar";
 import { frDate } from "@/lib/format";
+import { VOICES } from "@/lib/gemini";
 import { getProfile, LEVELS, listFacts } from "@/lib/profile";
+import { VERSION } from "@/lib/version";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +59,14 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
             ))}
           </select>
         </label>
+        <label className="field">
+          <span>La voix de Carla</span>
+          <select name="voice" defaultValue={p.voice || "Aoede"}>
+            {VOICES.map((v) => (
+              <option key={v} value={v}>{v}{v === "Aoede" ? " (par défaut)" : ""}</option>
+            ))}
+          </select>
+        </label>
         <button className="primary" type="submit">Enregistrer</button>
       </form>
 
@@ -85,6 +95,7 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
           <button className="secondary" type="submit">Ajouter</button>
         </form>
       </section>
+      <p className="muted small center-small">Hablemos con Carla · v{VERSION}</p>
       <TabBar active={""} />
     </div>
   );

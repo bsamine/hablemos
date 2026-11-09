@@ -198,3 +198,34 @@ textarea, select {
 .scorecard li { display: flex; gap: 10px; align-items: center; }
 .score { color: var(--accent); letter-spacing: 2px; white-space: nowrap; }
 .fact .primary.pill { margin: 0; }
+
+/* ---------- v0.1.1 ---------- */
+.loop { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; counter-reset: none; }
+.loop > li { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.loop > li.current { border-color: var(--accent); }
+.loop > li.past { opacity: .75; }
+.loop .pill { align-self: flex-start; }
+.pocket { display: flex; flex-direction: column; gap: 10px; }
+.recorder { display: flex; flex-direction: column; gap: 10px; }
+.recorder.compact .secondary { align-self: flex-start; }
+.recording { animation: pulse-bg 1.4s infinite; }
+@keyframes pulse-bg { 50% { opacity: .75; } }
+.scene { width: 100%; border-radius: var(--radius); border: 1px solid var(--line); background: var(--card); aspect-ratio: 4 / 3; object-fit: cover; }
+.checklist { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.qa > summary { display: flex; gap: 8px; align-items: center; font-weight: 600; color: var(--ink); list-style: none; }
+.qa > summary::-webkit-details-marker { display: none; }
+.qa[open] > summary { margin-bottom: 8px; }
+.option { text-align: left; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+.option.right { border-color: var(--good); background: var(--good-bg); font-weight: 600; }
+.option.wrong { border-color: #c0392b; text-decoration: line-through; }
+.level-card { border: 2px solid var(--accent); text-align: center; display: flex; flex-direction: column; gap: 8px; }
+.level-card ul { text-align: left; }
+.level-big { font-size: 56px; font-weight: 800; color: var(--accent); line-height: 1; font-family: Georgia, serif; }
+.pron-words { font-size: 20px; line-height: 1.6; }
+.pron-words .ok { color: var(--good); }
+.pron-words .ko { color: #c0392b; text-decoration: underline dotted; }
+.plan a { padding: 10px 12px; }
+.plan .day { text-transform: capitalize; font-size: 11px; }
+.podcast-text { white-space: pre-wrap; line-height: 1.7; }
+.add-moment input, .add-moment select { text-align: left; }
+.secondary.pill { margin: 0; padding: 8px 14px; font-size: 14px; }

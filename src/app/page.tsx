@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
+import { getCache, weekKey } from "@/lib/cache";
+import { daysUntil, listEvents } from "@/lib/events";
+import { planHref, type WeekPlan } from "@/lib/generate";
 import { history } from "@/lib/history";
 import { listJobAds } from "@/lib/jobs";
 import { doneScenarioIds, stats } from "@/lib/learning";
 import { currentMission, missionStats } from "@/lib/missions";
 import { getProfile, LEVELS, levelSuggestion } from "@/lib/profile";
 import { LESSONS } from "@/lib/scenarios";
+import GenerateButton from "./GenerateButton";
 import HistoryList from "./HistoryList";
 import MissionCard from "./MissionCard";
 import TabBar from "./TabBar";
@@ -26,6 +30,8 @@ export default async function Home() {
   const jobs = listJobAds().length;
   const missionsDone = missionStats().done;
   const lessonsDone = LESSONS.filter((x) => done.has(x.id)).length;
+  const plan = getCache<WeekPlan>(`plan:${weekKey()}`);
+  const soon = listEvents().upcoming.filter((e) => daysUntil(e.date) <= 3);
 
   return (
     <div className="stack with-tabbar">
@@ -69,6 +75,45 @@ export default async function Home() {
         <div><strong>{s.streak}</strong><span>jours d'affilée</span></div>
         <div><strong>{s.minutes}</strong><span>minutes parlées</span></div>
         <Link href="/progres"><strong>{s.mastered}/{s.words}</strong><span>mots maîtrisés ›</span></Link>
+      </section>
+
+      {soon.map((ev) => (
+        <Link key={ev.id} href={`/moment/${ev.id}`} className="card mission">
+          <p className="eyebrow">📅 {daysUntil(ev.date) === 0 ? "Aujourd'hui" : daysUntil(ev.date) === 1 ? "Demain" : `Dans ${daysUntil(ev.date)} jours`}</p>
+          <p className="mission-text">{ev.title}</p>
+          <span className="muted small">{ev.pocket ? "Ta carte de poche est prête · répète avec Carla" : "Répète avec Carla et prépare ta carte de poche"} ›</span>
+        </Link>
+      ))}
+
+      <section className="card stack">
+        <div className="top">
+          <p className="eyebrow">Ta semaine avec Carla</p>
+          {plan && <span className="muted small">{plan.focus_fr}</span>}
+        </div>
+        {plan ? (
+          <>
+            <p className="small">{plan.intro_fr}</p>
+            <ul className="list plan">
+              {plan.items.map((it, i) => (
+                <li key={i}>
+                  <Link href={planHref(it)}>
+                    <span className="day small">{it.day.slice(0, 3)}</span>
+                    <span className="grow">
+                      <strong>{it.title_fr}</strong>
+                      <span className="muted small">{it.why_fr}</span>
+                    </span>
+                    <span className="muted">›</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : (
+          <>
+            <p className="small muted">Carla construit ton programme à partir de tes moments à venir, de tes erreurs et de ce qui t'a manqué.</p>
+            <GenerateButton url="/api/generate/plan" label="Préparer ma semaine" busyLabel="Carla prépare ta semaine…" />
+          </>
+        )}
       </section>
 
       <Link href={`/session/${next.id}`} className="card hero">

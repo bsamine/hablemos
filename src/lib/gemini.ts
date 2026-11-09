@@ -1,4 +1,4 @@
-import { GoogleGenAI, Modality, type LiveConnectConfig } from "@google/genai";
+import { EndSensitivity, GoogleGenAI, Modality, type LiveConnectConfig, type Part } from "@google/genai";
 
 export const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
 export const LIVE_API_VERSION = process.env.GEMINI_LIVE_API_VERSION ?? "v1alpha";
@@ -9,6 +9,8 @@ export const TEXT_FALLBACK_MODELS = (process.env.GEMINI_TEXT_FALLBACK_MODELS ?? 
   .map((m) => m.trim())
   .filter(Boolean);
 export const VOICE = process.env.GEMINI_VOICE ?? "Aoede";
+export const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image";
+export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon"] as const;
 
 export function serverClient(apiVersion?: string) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -16,15 +18,30 @@ export function serverClient(apiVersion?: string) {
   return new GoogleGenAI({ apiKey, ...(apiVersion ? { httpOptions: { apiVersion } } : {}) });
 }
 
-/** The full Live session setup. It is baked into the token: Gemini ignores config sent by the browser. */
-export function liveConfig(systemInstruction?: string): LiveConnectConfig {
+/**
+ * The full Live session setup, baked into the token.
+ * Turn-taking is tuned for a learner: beginners pause to search for words, so Carla waits longer
+ * before answering (low end-of-speech sensitivity + longer silence) instead of cutting her off.
+ */
+export function liveConfig(
+  systemInstruction?: string,
+  opts: { voice?: string; level?: string } = {},
+): LiveConnectConfig {
+  const beginner = !opts.level || opts.level === "A1" || opts.level === "A2";
   return {
     responseModalities: [Modality.AUDIO],
     ...(systemInstruction ? { systemInstruction } : {}),
-    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
+    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || VOICE } } },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     contextWindowCompression: { slidingWindow: {} },
+    realtimeInputConfig: {
+      automaticActivityDetection: {
+        endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+        silenceDurationMs: beginner ? 1400 : 900,
+        prefixPaddingMs: 200,
+      },
+    },
   };
 }
 
@@ -56,8 +73,10 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isBusy = (msg: string) =>
   /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|aborted|timeout)\b/i.test(msg);
 
-/** Ask a text model for JSON. Each model gets one retry when busy, then the next model is tried. */
-export async function generateJson(prompt: string): Promise<unknown> {
+/** Ask a text model for JSON. Each model gets one retry when busy, then the next model is tried.
+ *  `audio` (base64 WAV) is sent along with the prompt for voice notes. */
+export async function generateJson(prompt: string, audio?: { data: string; mimeType: string }): Promise<unknown> {
+  const contents: string | Part[] = audio ? [{ text: prompt }, { inlineData: audio }] : prompt;
   const ai = serverClient("v1beta");
   const errors: string[] = [];
   const attempts = [...new Set([TEXT_MODEL, ...TEXT_FALLBACK_MODELS])].flatMap((m) => [
@@ -77,7 +96,7 @@ export async function generateJson(prompt: string): Promise<unknown> {
     try {
       const res = await ai.models.generateContent({
         model,
-        contents: prompt,
+        contents,
         config: {
           responseMimeType: "application/json",
           temperature: 0.3,
@@ -97,4 +116,22 @@ export async function generateJson(prompt: string): Promise<unknown> {
     }
   }
   throw new Error(errors.join(" | "));
+}
+
+/** Generate one illustration (PNG bytes). */
+export async function generateImage(prompt: string): Promise<Buffer> {
+  const ai = serverClient("v1beta");
+  const res = await ai.models.generateContent({
+    model: IMAGE_MODEL,
+    contents: prompt,
+    config: {
+      responseModalities: ["IMAGE"],
+      imageConfig: { aspectRatio: "4:3" },
+      abortSignal: AbortSignal.timeout(90_000),
+    },
+  });
+  for (const part of res.candidates?.[0]?.content?.parts ?? []) {
+    if (part.inlineData?.data) return Buffer.from(part.inlineData.data, "base64");
+  }
+  throw new Error("aucune image renvoyée");
 }

@@ -35,6 +35,19 @@ export async function GET(req: Request) {
     )
     .all(new Date(Date.now() - 2 * 86400_000).toISOString()) as { id: number; started_at: string; debrief_error: string }[];
   const thisWeek = p.weeks.at(-1)!;
+  const lastWeekMin = p.weeks.at(-2)!.minutes;
+  const name = profile.name || "";
+  const url = `https://${process.env.APP_HOST ?? ""}`;
+  const topErr = p.errors.slice(0, 3).map((e) => ERROR_LABELS[e.category] ?? e.category);
+  const reminder =
+    `¡Hola${name ? ` ${name}` : ""}! Carla t'attend 🙂 ` +
+    (s.due ? `${Math.min(s.due, 8)} mots à revoir en 4 minutes, ` : "") +
+    `ou une leçon de 15 min. Série en cours : ${s.streak} jour${s.streak > 1 ? "s" : ""}. ${url}`;
+  const sunday =
+    `Ta semaine en espagnol${name ? `, ${name}` : ""} : ${thisWeek.minutes} min parlées (${thisWeek.minutes >= lastWeekMin ? "+" : ""}${thisWeek.minutes - lastWeekMin} vs la semaine dernière), ` +
+    `${thisWeek.sessions} séance${thisWeek.sessions > 1 ? "s" : ""}, ${s.mastered} mots maîtrisés. ` +
+    (topErr.length ? `À surveiller : ${topErr.join(", ")}. ` : "") +
+    `Prépare ta semaine avec Carla : ${url}`;
 
   return NextResponse.json({
     learner: profile.name || null,
@@ -48,6 +61,7 @@ export async function GET(req: Request) {
     lastWeek: { minutes: p.weeks.at(-2)!.minutes, sessions: p.weeks.at(-2)!.sessions },
     topErrors: p.errors.slice(0, 3).map((e) => ({ category: ERROR_LABELS[e.category] ?? e.category, last14days: e.recent })),
     failedDebriefs: failed,
-    appUrl: `https://${process.env.APP_HOST ?? ""}`,
+    appUrl: url,
+    messages: { reminder_fr: reminder, sunday_fr: sunday },
   });
 }

@@ -25,7 +25,7 @@ export function knownErrors(limit = 4): string[] {
   return rows.map((r) => `${ERROR_LABELS[r.category] ?? r.category} (${r.n}×), ex. « ${r.ex} » → « ${r.fix} »`);
 }
 
-function upsertWord(word: string, translation: string, example: string) {
+export function upsertWord(word: string, translation: string, example: string) {
   db()
     .prepare(
       `INSERT INTO words (word, translation, example, stage, due_at, times_used, created_at)

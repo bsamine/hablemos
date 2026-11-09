@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-const DATA_DIR = process.env.DATA_DIR ?? path.join(process.cwd(), "data");
+export const DATA_DIR = process.env.DATA_DIR ?? path.join(process.cwd(), "data");
 
 type Db = Database.Database;
 const g = globalThis as unknown as { __hablemosDb?: Db };
@@ -45,6 +45,28 @@ export function db(): Db {
   `);
   conn.exec(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS voice_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      ref TEXT NOT NULL DEFAULT '',
+      file TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'other',
+      details TEXT NOT NULL DEFAULT '',
+      job_ad_id INTEGER,
+      pocket TEXT,
+      status TEXT NOT NULL DEFAULT 'upcoming',
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS job_ads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -81,6 +103,11 @@ export function db(): Db {
     } catch {
       /* column already exists */
     }
+  }
+  try {
+    conn.exec("ALTER TABLE job_ads ADD COLUMN pack TEXT");
+  } catch {
+    /* exists */
   }
   g.__hablemosDb = conn;
   return conn;
