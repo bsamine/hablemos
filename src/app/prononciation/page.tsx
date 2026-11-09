@@ -18,8 +18,8 @@ export default async function Prononciation() {
       <div>
         <h1>🎯 Ma prononciation</h1>
         <p className="muted">
-          Écoute la phrase, lis-la à voix haute, et Carla te dit quels mots sonnent bien et lesquels travailler. Les mots en rouge
-          ont un conseil.
+          Écoute Carla, puis lis la phrase à voix haute. Carla te dit ce qu'elle a vraiment entendu, mot par mot, puis te redit
+          la phrase correctement, avec un guide de prononciation.
         </p>
       </div>
       {sentences.map((t) => (

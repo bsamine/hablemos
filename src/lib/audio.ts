@@ -92,14 +92,52 @@ function b64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-/** Free text-to-speech on the device (iPhone has good es-ES voices) for corrections. */
-export function speakEs(text: string) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+let current: HTMLAudioElement | null = null;
+
+/** Stop whatever Carla is currently saying. */
+export function stopSpeaking() {
+  current?.pause();
+  current = null;
+  if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+/**
+ * Carla says a Spanish text (Gemini TTS, cached on the server). `rate` applies instantly.
+ * Falls back to a female device voice if the server voice is unavailable.
+ */
+export function speakEs(text: string, rate = 1): HTMLAudioElement | null {
+  if (typeof window === "undefined" || !text) return null;
+  stopSpeaking();
+  const a = new Audio(`/api/tts?t=${encodeURIComponent(text)}`);
+  a.playbackRate = rate;
+  a.preservesPitch = true;
+  current = a;
+  let started = false;
+  a.addEventListener("playing", () => (started = true), { once: true });
+  const fallback = () => {
+    if (started || current !== a) return;
+    current = null;
+    deviceSpeak(text, rate);
+  };
+  a.addEventListener("error", fallback, { once: true });
+  setTimeout(fallback, 12_000);
+  a.play().catch(fallback);
+  return a;
+}
+
+const MALE = /jorge|diego|juan|carlos|pablo|enrique|miguel|andr[eé]s|male|hombre/i;
+
+function deviceSpeak(text: string, rate: number) {
+  if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "es-ES";
-  u.rate = 0.85;
-  const v = window.speechSynthesis.getVoices().find((x) => x.lang === "es-ES");
+  u.rate = Math.max(0.6, Math.min(1.2, rate * 0.9));
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.startsWith("es"));
+  const v =
+    voices.find((x) => x.lang === "es-ES" && /m[oó]nica|paulina|marisol|elvira|helena|female|mujer/i.test(x.name)) ??
+    voices.find((x) => x.lang === "es-ES" && !MALE.test(x.name)) ??
+    voices.find((x) => !MALE.test(x.name));
   if (v) u.voice = v;
   window.speechSynthesis.speak(u);
 }

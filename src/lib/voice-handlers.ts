@@ -28,8 +28,10 @@ export type DiaryResult = {
 };
 export type PronunciationResult = {
   transcript: string;
+  target: string;
   score: number;
-  words: { word: string; ok: boolean; tip_fr: string }[];
+  words: { word: string; heard: string; ok: boolean; tip_fr: string }[];
+  phonetic_fr: string;
   tip_fr: string;
 };
 
@@ -110,15 +112,27 @@ JSON strict : { "transcript": "...", "reply_es": "...", "corrections": [ { "said
 }
 
 async function pronunciation(audio: Audio, target: string): Promise<PronunciationResult> {
-  return (await analyseAudio(
-    `${learner()}
-Elle lit cette phrase à voix haute : « ${target} ».
-Écoute sa prononciation (accent d'Espagne attendu, mais sois tolérante sur l'accent français tant que c'est compréhensible).
-1. Transcris ce qu'elle a réellement dit.
-2. score : de 1 (incompréhensible) à 5 (très clair et naturel).
-3. words : chaque mot de la phrase cible, ok = true s'il est bien prononcé ; sinon un conseil court en français (ex. « le j se prononce comme un r raclé »).
-4. tip_fr : le conseil le plus utile, en une phrase.
-JSON strict : { "transcript": "...", "score": 1, "words": [ { "word": "...", "ok": true, "tip_fr": "" } ], "tip_fr": "..." }`,
+  // Step 1 — blind transcription: the model must not know the target, or it "hears" the correct sentence.
+  const heard = (await analyseAudio(
+    `Transcris EXACTEMENT ce que dit cette personne en espagnol, son par son, telle qu'elle le prononce.
+- N'autocorrige rien : si un mot est mal prononcé, écris ce que tu entends vraiment (même si ce n'est pas un vrai mot, ex. « la cuenta » prononcé « la couenta » → « la kuenta »).
+- N'ajoute pas de ponctuation inventée. Si tu n'entends rien d'intelligible, renvoie une chaîne vide.
+JSON strict : { "transcript": "..." }`,
     audio,
-  )) as PronunciationResult;
+  )) as { transcript: string };
+
+  // Step 2 — compare with the target, listening to the audio again.
+  const r = (await analyseAudio(
+    `${learner()}
+Elle devait lire à voix haute : « ${target} ».
+Une transcription faite sans connaître la phrase cible a entendu : « ${heard.transcript ?? ""} ».
+Écoute à nouveau l'enregistrement et compare, mot par mot, avec la phrase cible (accent d'Espagne attendu ; un accent français léger est acceptable s'il reste clair).
+- words : CHAQUE mot de la phrase cible, dans l'ordre : word = le mot cible, heard = ce qui a été entendu pour ce mot (vide s'il manque), ok = true seulement s'il est clairement bien prononcé, tip_fr = si ok est false, un conseil concret pour une francophone (ex. « le j se dit comme un r raclé du fond de la gorge », « appuie sur la syllabe CUEN »).
+- score : de 1 (incompréhensible) à 5 (clair et naturel). Sois exigeante mais juste : si des mots manquent ou sont déformés, le score ne peut pas dépasser 3.
+- phonetic_fr : la phrase cible écrite « à la française » pour l'aider à la prononcer, avec la syllabe accentuée en MAJUSCULES (ex. « la KOUEN-ta, por fa-BOR »).
+- tip_fr : le conseil le plus utile, en une phrase.
+JSON strict : { "score": 1, "words": [ { "word": "...", "heard": "...", "ok": true, "tip_fr": "" } ], "phonetic_fr": "...", "tip_fr": "..." }`,
+    audio,
+  )) as Omit<PronunciationResult, "transcript" | "target">;
+  return { ...r, transcript: heard.transcript ?? "", target };
 }

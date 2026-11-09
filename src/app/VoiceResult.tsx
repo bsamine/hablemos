@@ -89,18 +89,31 @@ export default function VoiceResult({ kind, result }: { kind: string; result: un
         <p>
           <span className="score">{"●".repeat(s)}{"○".repeat(5 - s)}</span> <strong>{s}/5</strong>
         </p>
-        <p className="pron-words">
+        <div className="card good stack">
+          <p className="eyebrow">Comme ça, avec Carla</p>
+          <p className="better">{r.target}</p>
+          {r.phonetic_fr && <p className="phonetic">{r.phonetic_fr}</p>}
+          <div className="row">
+            <button className="secondary" onClick={() => speakEs(r.target, 1)}>▶ Écouter</button>
+            <button className="secondary" onClick={() => speakEs(r.target, 0.7)}>🐢 Plus lentement</button>
+          </div>
+        </div>
+        <p className="muted small">Carla a entendu : « {r.transcript || "…"} »</p>
+        <ul className="pron-list">
           {r.words?.map((w, i) => (
-            <span key={i} className={w.ok ? "ok" : "ko"} title={w.tip_fr}>
-              {w.word}{" "}
-            </span>
+            <li key={i} className={w.ok ? "ok" : "ko"}>
+              <span className="pron-word">{w.ok ? "✓" : "✗"} {w.word}</span>
+              {!w.ok && (
+                <span className="small">
+                  {w.heard ? <>entendu « {w.heard} » · </> : <>pas entendu · </>}
+                  {w.tip_fr}
+                  <button className="play inline" onClick={() => speakEs(w.word.replace(/[.,!?¿¡]/g, ""), 0.7)} aria-label={`Écouter ${w.word}`}>▶</button>
+                </span>
+              )}
+            </li>
           ))}
-        </p>
-        {r.words?.filter((w) => !w.ok && w.tip_fr).map((w, i) => (
-          <p key={i} className="small"><strong>{w.word}</strong> : {w.tip_fr}</p>
-        ))}
-        {r.tip_fr && <p className="muted">{r.tip_fr}</p>}
-        <p className="muted small">Entendu : « {r.transcript} »</p>
+        </ul>
+        {r.tip_fr && <p><strong>Conseil :</strong> {r.tip_fr}</p>}
       </div>
     );
   }

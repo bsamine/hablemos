@@ -204,7 +204,7 @@ ${episode === 1 ? "C'est le PREMIER épisode : présente l'héroïne, son arriv�
 
 DÉROULÉ (environ 10 min) :
 1. « Previously… » : 2 phrases de rappel en espagnol simple (ou de présentation pour l'épisode 1).
-2. Raconte l'épisode en courtes scènes (3-4 phrases à la fois, niveau ${p.level}), avec des voix de personnages variées. Glisse les mots à réviser dans l'histoire.
+2. Raconte l'épisode en courtes scènes (3-4 phrases à la fois, niveau ${p.level}), en donnant vie aux personnages par le ton et le vocabulaire (toujours avec TA voix de femme, sans imiter de voix d'homme ; annonce qui parle : « dice el vecino… »). Glisse les mots à réviser dans l'histoire.
 3. À 3 moments clés, arrête-toi et demande-lui de DÉCIDER en espagnol ce que fait l'héroïne (« ¿Qué haces? ¿Aceptas la invitación o no? ») ou de répondre à un personnage. Sa réponse change vraiment la suite.
 4. Corrige ses erreurs importantes très brièvement, sans casser la magie (« Casi : se dice… ¡Sigamos! »).
 5. Termine sur un cliffhanger en espagnol, puis en français : « Fin de l'épisode ${episode}. Ton bilan s'affiche à l'écran. »`,

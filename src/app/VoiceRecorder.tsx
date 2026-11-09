@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { speakEs } from "@/lib/audio";
 import VoiceResult from "./VoiceResult";
 
 type Phase = "idle" | "recording" | "uploading" | "analysing" | "done" | "error";
@@ -43,6 +44,8 @@ export default function VoiceRecorder({
       if (d.status === "done") {
         setResult(d.result);
         setPhase("done");
+        // Pronunciation: Carla immediately says the sentence the right way.
+        if (kind === "pronunciation" && refId) speakEs(refId, 0.85);
         router.refresh();
       } else if (d.status === "error") {
         setError(d.error ?? "L'analyse a échoué.");
@@ -50,7 +53,7 @@ export default function VoiceRecorder({
       }
     }, 2000);
     return () => clearInterval(t);
-  }, [phase, noteId, router]);
+  }, [phase, noteId, router, kind, refId]);
 
   async function start() {
     setError("");

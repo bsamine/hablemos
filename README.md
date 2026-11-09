@@ -36,6 +36,12 @@ scripts/backup.sh      daily DB backup (cron installed by deploy.sh)
 
 ## Changelog
 
+### v0.1.2
+- **Carla always has the same female voice.** Only female voices are offered, and a male voice saved earlier falls back to the default. In role-plays she changes tone, never voice.
+- **Carla uses your first name** from the first greeting, then every few exchanges.
+- **Every ▶ button and the podcast are read by Carla.** Her voice comes from Gemini's text-to-speech model and is cached on the server. The device voice is only a fallback. The podcast player changes speed instantly (slow / normal / fast) and has a ↺ 10 s button.
+- **Pronunciation is analysed in two steps.** Gemini first transcribes what she said without knowing the target sentence, then compares the two word by word. Carla then says the correct sentence aloud, with a "slower" button and a guide written for French speakers.
+
 ### v0.1.1 — « Vivir en español »
 - **Faster, more patient Carla.** The session is prepared while you read the intro, so "Commencer" only has to connect. Turn-taking is tuned for learners: Carla waits longer before answering at A1/A2, so she doesn't cut you off while you look for a word. You can choose her voice on the Profile page.
 - **The Before / During / After loop:**

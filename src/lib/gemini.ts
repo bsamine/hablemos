@@ -10,7 +10,12 @@ export const TEXT_FALLBACK_MODELS = (process.env.GEMINI_TEXT_FALLBACK_MODELS ?? 
   .filter(Boolean);
 export const VOICE = process.env.GEMINI_VOICE ?? "Aoede";
 export const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL ?? "gemini-3.1-flash-image";
-export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr", "Puck", "Charon"] as const;
+export const TTS_MODEL = process.env.GEMINI_TTS_MODEL ?? "gemini-3.8-flash-tts";
+/** Carla is always a woman: only female prebuilt voices are offered and accepted. */
+export const VOICES = ["Aoede", "Kore", "Leda", "Zephyr"] as const;
+export function carlaVoice(v?: string): string {
+  return (VOICES as readonly string[]).includes(v ?? "") ? v! : (VOICES as readonly string[]).includes(VOICE) ? VOICE : "Aoede";
+}
 
 export function serverClient(apiVersion?: string) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -31,7 +36,7 @@ export function liveConfig(
   return {
     responseModalities: [Modality.AUDIO],
     ...(systemInstruction ? { systemInstruction } : {}),
-    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: opts.voice || VOICE } } },
+    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: carlaVoice(opts.voice) } } },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
     contextWindowCompression: { slidingWindow: {} },
@@ -134,4 +139,43 @@ export async function generateImage(prompt: string): Promise<Buffer> {
     if (part.inlineData?.data) return Buffer.from(part.inlineData.data, "base64");
   }
   throw new Error("aucune image renvoyée");
+}
+
+/** Carla reading a text aloud (Gemini TTS). Returns a WAV file. */
+export async function generateSpeech(text: string, voice?: string, style = "Lee en español de España, despacio y con una voz clara y cálida de profesora"): Promise<Buffer> {
+  const ai = serverClient("v1beta");
+  const res = await ai.models.generateContent({
+    model: TTS_MODEL,
+    contents: `${style}:\n\n${text}`,
+    config: {
+      responseModalities: ["AUDIO"],
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: carlaVoice(voice) } } },
+      abortSignal: AbortSignal.timeout(90_000),
+    },
+  });
+  const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+  if (!part?.inlineData?.data) throw new Error("aucun audio renvoyé");
+  const pcm = Buffer.from(part.inlineData.data, "base64");
+  const mime = part.inlineData.mimeType ?? "";
+  if (/wav/i.test(mime)) return pcm;
+  const rate = Number(/rate=(\d+)/.exec(mime)?.[1] ?? 24000);
+  return pcmToWav(pcm, rate);
+}
+
+function pcmToWav(pcm: Buffer, rate: number): Buffer {
+  const h = Buffer.alloc(44);
+  h.write("RIFF", 0);
+  h.writeUInt32LE(36 + pcm.length, 4);
+  h.write("WAVE", 8);
+  h.write("fmt ", 12);
+  h.writeUInt32LE(16, 16);
+  h.writeUInt16LE(1, 20);
+  h.writeUInt16LE(1, 22);
+  h.writeUInt32LE(rate, 24);
+  h.writeUInt32LE(rate * 2, 28);
+  h.writeUInt16LE(2, 32);
+  h.writeUInt16LE(16, 34);
+  h.write("data", 36);
+  h.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([h, pcm]);
 }

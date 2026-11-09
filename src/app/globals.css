@@ -229,3 +229,15 @@ textarea, select {
 .podcast-text { white-space: pre-wrap; line-height: 1.7; }
 .add-moment input, .add-moment select { text-align: left; }
 .secondary.pill { margin: 0; padding: 8px 14px; font-size: 14px; }
+.speeds { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; align-self: flex-start; }
+.speeds button { border: 0; background: var(--card); color: var(--ink); padding: 8px 14px; font-size: 14px; }
+.speeds button.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.progress-line { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.progress-line span { display: block; height: 100%; background: var(--accent); }
+.phonetic { font-family: ui-monospace, Menlo, monospace; font-size: 15px; letter-spacing: .02em; }
+.pron-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pron-list li { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 12px; background: var(--bg); }
+.pron-list li.ok .pron-word { color: var(--good); font-weight: 600; }
+.pron-list li.ko { background: var(--fix-bg); }
+.pron-list li.ko .pron-word { color: #c0392b; font-weight: 700; }
+.play.inline { width: 26px; height: 26px; font-size: 10px; margin-left: 6px; vertical-align: middle; }

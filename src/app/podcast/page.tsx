@@ -22,7 +22,7 @@ export default async function PodcastPage() {
         <p className="muted">2 minutes d'écoute par jour avec tes mots, puis 3 questions. Parfait pour le trajet.</p>
       </div>
       {podcast ? (
-        <Player podcast={podcast} />
+        <Player podcast={podcast} day={todayKey()} />
       ) : (
         <GenerateButton url="/api/generate/podcast" label="Préparer l'épisode du jour" busyLabel="Carla écrit l'épisode…" />
       )}
