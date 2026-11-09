@@ -4,7 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { history } from "@/lib/history";
 import { getScenario } from "@/lib/scenarios";
 import HistoryList from "../../HistoryList";
-import Conversation from "./Conversation";
+import Conversation from "../../Conversation";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +18,16 @@ export default async function SessionPage({ params }: { params: Promise<{ scenar
     <div className="stack">
       <header className="top">
         <Link href="/" className="link">‹ Accueil</Link>
-        <span className="muted small">Jour {scenario.day} · {scenario.level}</span>
+        <span className="muted small">{scenario.theme} · {scenario.level}</span>
       </header>
       <div>
         <h1>{scenario.title}</h1>
         <p className="muted">{scenario.titleFr}</p>
       </div>
-      <Conversation scenario={scenario} />
+      <Conversation
+        preview={{ title: scenario.title, taskGoal: scenario.taskGoal, words: scenario.words, wordsLabel: "Les 5 mots du jour" }}
+        start={{ mode: "scenario", scenarioId: scenario.id }}
+      />
       {past.length > 0 && (
         <section className="stack">
           <h3>Mes bilans sur ce thème</h3>

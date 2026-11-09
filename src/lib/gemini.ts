@@ -24,7 +24,6 @@ export function liveConfig(systemInstruction?: string): LiveConnectConfig {
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    sessionResumption: {},
     contextWindowCompression: { slidingWindow: {} },
   };
 }
@@ -39,10 +38,13 @@ export async function createLiveToken(
   const ai = serverClient(apiVersion);
   const token = await ai.authTokens.create({
     config: {
-      uses: 1,
-      expireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
-      newSessionExpireTime: new Date(Date.now() + 2 * 60_000).toISOString(),
+      // A few uses so the browser can reconnect (Gemini closes Live connections after ~10 min).
+      uses: 5,
+      expireTime: new Date(Date.now() + 40 * 60_000).toISOString(),
+      newSessionExpireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
       liveConnectConstraints: { model, ...(config ? { config } : {}) },
+      // Lock only the fields set above; the browser may still send its session-resumption handle.
+      ...(config ? { lockAdditionalFields: [] } : {}),
       httpOptions: { apiVersion },
     },
   });

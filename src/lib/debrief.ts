@@ -1,8 +1,9 @@
 import { db, type SessionRow } from "./db";
 import { generateJson } from "./gemini";
 import { applyFeedback, knownErrors } from "./learning";
+import { sessionSpec } from "./modes";
+import { addFacts, getProfile, listFacts } from "./profile";
 import { buildDebriefPrompt, type Feedback } from "./prompts";
-import { getScenario } from "./scenarios";
 
 export type Turn = { role: "learner" | "tutor"; text: string };
 
@@ -28,7 +29,7 @@ export function startDebrief(id: number): "started" | "running" | "done" | "noth
   if (!turns.some((t) => t.role === "learner")) {
     db()
       .prepare("UPDATE sessions SET debrief_status = 'error', debrief_error = ? WHERE id = ?")
-      .run("Séance trop courte : Lucía ne t'a pas entendue parler.", id);
+      .run("Séance trop courte : Carla ne t'a pas entendue parler.", id);
     return "nothing";
   }
   db()
@@ -40,24 +41,26 @@ export function startDebrief(id: number): "started" | "running" | "done" | "noth
 }
 
 async function run(row: SessionRow, turns: Turn[]) {
-  const scenario = getScenario(row.scenario_id);
+  const spec = sessionSpec(row);
   try {
-    if (!scenario) throw new Error("scénario inconnu");
+    if (!spec) throw new Error("séance inconnue");
     const transcript = turns.map((t) => `${t.role === "learner" ? "L" : "T"}: ${t.text.trim()}`).join("\n");
     const prompt = buildDebriefPrompt({
-      level: process.env.LEARNER_LEVEL ?? "A1",
+      level: getProfile().level,
       knownErrors: knownErrors(),
+      knownFacts: listFacts().map((f) => f.text),
       targetWords: JSON.parse(row.target_words),
       reviewWords: JSON.parse(row.review_words),
-      scenarioTitle: scenario.title,
-      taskGoal: scenario.taskGoal,
+      title: spec.title,
+      taskGoal: spec.taskGoal,
       transcript,
     });
     const fb = (await generateJson(prompt)) as Feedback;
     db()
       .prepare("UPDATE sessions SET feedback = ?, debrief_status = 'done', debrief_error = NULL WHERE id = ?")
       .run(JSON.stringify(fb), row.id);
-    applyFeedback(row.id, scenario, fb);
+    applyFeedback(row.id, spec.words, fb);
+    if (Array.isArray(fb.learner_facts)) addFacts(fb.learner_facts, row.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`debrief ${row.id} failed:`, msg);

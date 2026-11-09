@@ -6,7 +6,7 @@ import { useState } from "react";
 type Variant = { name: string; apiVersion: string; model: string; config: LiveConnectConfig };
 type Result = { name: string; status: string; detail: string; ms: number };
 
-const SYS = "Tu es Lucía, professeure d'espagnol. Réponds en espagnol en une phrase courte.";
+const SYS = "Tu es Carla, professeure d'espagnol. Réponds en espagnol en une phrase courte.";
 
 export default function Diagnostic({ model, apiVersion, voice }: { model: string; apiVersion: string; voice: string }) {
   const [results, setResults] = useState<Result[]>([]);

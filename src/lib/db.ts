@@ -43,7 +43,22 @@ export function db(): Db {
       created_at TEXT NOT NULL
     );
   `);
-  for (const col of ["debrief_status TEXT", "debrief_error TEXT", "debrief_started_at TEXT"]) {
+  conn.exec(`
+    CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS facts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text TEXT NOT NULL,
+      session_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+  `);
+  for (const col of [
+    "debrief_status TEXT",
+    "debrief_error TEXT",
+    "debrief_started_at TEXT",
+    "mode TEXT",
+    "spec TEXT",
+  ]) {
     try {
       conn.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
     } catch {
@@ -67,6 +82,8 @@ export type SessionRow = {
   debrief_status: "pending" | "done" | "error" | null;
   debrief_error: string | null;
   debrief_started_at: string | null;
+  mode: string | null;
+  spec: string | null;
 };
 
 export type WordRow = {

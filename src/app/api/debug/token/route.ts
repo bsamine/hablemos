@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 /** Diagnostic only: mint a Live token for a given API version + model. */
 export async function POST(req: Request) {
+  if (process.env.ENABLE_DEBUG !== "1") return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { apiVersion, model } = (await req.json()) as { apiVersion: string; model: string };
   try {

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Carla">
+  <!-- Carla: a "C" that is also a speech bubble, with her voice coming out of the opening -->
+  <rect width="512" height="512" rx="116" fill="#c8553d"/>
+  <!-- C-shaped bubble -->
+  <path d="M352 158
+           A136 136 0 1 0 352 354"
+        fill="none" stroke="#fbf6ef" stroke-width="64" stroke-linecap="round"/>
+  <!-- bubble tail -->
+  <path d="M150 352 L112 430 L206 386 Z" fill="#fbf6ef"/>
+  <!-- voice: three dots growing out of the C -->
+  <circle cx="300" cy="256" r="20" fill="#f2b84b"/>
+  <circle cx="362" cy="256" r="27" fill="#f2b84b"/>
+  <circle cx="436" cy="256" r="34" fill="#f2b84b"/>
+</svg>

@@ -1,9 +1,12 @@
 import { db, type SessionRow } from "./db";
+import { sessionSpec } from "./modes";
 import type { Feedback } from "./prompts";
 
 export type HistoryItem = {
   id: number;
   scenarioId: string;
+  title: string;
+  mode: string;
   startedAt: string;
   durationS: number | null;
   status: "done" | "pending" | "error";
@@ -24,6 +27,8 @@ export function history(opts: { scenarioId?: string; limit?: number } = {}): His
     return {
       id: r.id,
       scenarioId: r.scenario_id,
+      title: sessionSpec(r)?.title ?? r.scenario_id,
+      mode: r.mode ?? "scenario",
       startedAt: r.started_at,
       durationS: r.duration_s,
       status: fb ? "done" : r.debrief_status === "pending" ? "pending" : "error",

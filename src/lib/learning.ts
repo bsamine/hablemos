@@ -1,6 +1,6 @@
 import { db, type WordRow } from "./db";
-import type { Feedback } from "./prompts";
-import type { Scenario } from "./scenarios";
+import { ERROR_LABELS, type Feedback } from "./prompts";
+import type { TargetWord } from "./scenarios";
 
 // Days until next review for each stage (0 = new). Stage 6 = mastered.
 const INTERVALS = [1, 1, 2, 4, 7, 15, 30];
@@ -22,7 +22,7 @@ export function knownErrors(limit = 4): string[] {
        FROM errors WHERE created_at >= ? GROUP BY category ORDER BY n DESC LIMIT ?`,
     )
     .all(inDays(-30), limit) as { category: string; n: number; ex: string; fix: string }[];
-  return rows.map((r) => `${r.category} (${r.n}×), ex. « ${r.ex} » → « ${r.fix} »`);
+  return rows.map((r) => `${ERROR_LABELS[r.category] ?? r.category} (${r.n}×), ex. « ${r.ex} » → « ${r.fix} »`);
 }
 
 function upsertWord(word: string, translation: string, example: string) {
@@ -51,9 +51,9 @@ function review(word: string, status: "used_alone" | "used_with_help" | "not_use
 }
 
 /** Store the debrief: words (new + reviewed) and errors. */
-export function applyFeedback(sessionId: number, scenario: Scenario, fb: Feedback) {
+export function applyFeedback(sessionId: number, targetWords: TargetWord[], fb: Feedback) {
   const tx = db().transaction(() => {
-    for (const w of scenario.words) upsertWord(w.word, w.fr, w.example);
+    for (const w of targetWords) upsertWord(w.word, w.fr, w.example);
     for (const w of fb.new_words ?? []) if (w.word) upsertWord(w.word, w.translation_fr ?? "", w.example ?? "");
     for (const w of fb.words ?? []) if (w.word) review(w.word, w.status);
     const ins = db().prepare(

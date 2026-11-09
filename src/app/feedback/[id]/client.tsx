@@ -63,7 +63,7 @@ export function Pending({
       <section className="card hero">
         <div className="status">
           <span className="dot speaking" />
-          <span>Lucía prépare ton bilan…</span>
+          <span>Carla prépare ton bilan…</span>
           <span className="timer">{seconds}s</span>
         </div>
         <p className="muted small">

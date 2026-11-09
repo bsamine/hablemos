@@ -4,7 +4,8 @@ import { GoogleGenAI, Modality, type LiveServerMessage, type Session } from "@go
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AudioIO, speakEs } from "@/lib/audio";
-import type { Scenario } from "@/lib/scenarios";
+import type { StartRequest } from "@/lib/modes";
+import type { TargetWord } from "@/lib/scenarios";
 
 type Turn = { role: "learner" | "tutor"; text: string };
 type Phase = "ready" | "connecting" | "live" | "reconnecting" | "ending" | "error";
@@ -15,10 +16,17 @@ type StartResponse = {
   apiVersion: string;
   voice: string;
   minutes: number;
-  systemInstruction: string;
+  learnerName: string;
 };
 
-export default function Conversation({ scenario }: { scenario: Scenario }) {
+export type Preview = {
+  title: string;
+  taskGoal: string;
+  words: TargetWord[];
+  wordsLabel?: string;
+};
+
+export default function Conversation({ preview, start }: { preview: Preview; start: StartRequest }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("ready");
   const [error, setError] = useState("");
@@ -84,14 +92,11 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
     const ai = new GoogleGenAI({ apiKey: start.token, httpOptions: { apiVersion: start.apiVersion } });
     const session = await ai.live.connect({
       model: start.model,
+      // Carla's setup (prompt, voice, transcription) is locked into the token by the server.
+      // Only the resumption handle comes from the browser, to resume after a disconnect.
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: start.systemInstruction,
-        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: start.voice } } },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
         sessionResumption: handleRef.current ? { handle: handleRef.current } : {},
-        contextWindowCompression: { slidingWindow: {} },
       },
       callbacks: {
         onmessage: onMessage,
@@ -155,7 +160,7 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       const res = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenarioId: scenario.id }),
+        body: JSON.stringify(start),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erreur serveur");
@@ -166,7 +171,7 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
       startedAtRef.current = Date.now();
       setPhase("live");
       sessionRef.current?.sendRealtimeInput({
-        text: `(La séance commence. Présente-toi : tu es Lucía. Annonce le thème du jour : « ${scenario.title} ».)`,
+        text: `(La séance commence. Tu es Carla. Salue-la${data.learnerName ? ` (${data.learnerName})` : ""} et annonce la séance du jour : « ${preview.title} ».)`,
       });
     } catch (e) {
       console.error(e);
@@ -233,30 +238,39 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
   if (phase === "ready" || (phase === "error" && !startRef.current)) {
     return (
       <div className="stack">
-        <section className="card">
-          <p className="eyebrow">Tâche du jour</p>
-          <p>{scenario.taskGoal}</p>
+        <section className="card carla-intro">
+          <img src="/carla.svg" alt="" className="avatar" />
+          <div>
+            <p className="eyebrow">Avec Carla</p>
+            <p>{preview.taskGoal}</p>
+          </div>
         </section>
-        <section className="card">
-          <p className="eyebrow">Les 5 mots du jour</p>
-          <ul className="words">
-            {scenario.words.map((w) => (
-              <li key={w.word}>
-                <button className="play" onClick={() => speakEs(`${w.word}. ${w.example}`)} aria-label={`Écouter ${w.word}`}>
-                  ▶
-                </button>
-                <div>
-                  <strong>{w.word}</strong> <span className="muted">— {w.fr}</span>
-                  <div className="example">{w.example}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <p className="muted small">Conseil : avec des écouteurs, Lucía t'entend mieux. Dis « fin de la sesión » pour terminer.</p>
+        {preview.words.length > 0 && (
+          <section className="card">
+            <p className="eyebrow">{preview.wordsLabel ?? "Les mots du jour"}</p>
+            <ul className="words">
+              {preview.words.map((w) => (
+                <li key={w.word}>
+                  <button
+                    className="play"
+                    onClick={() => speakEs(w.example ? `${w.word}. ${w.example}` : w.word)}
+                    aria-label={`Écouter ${w.word}`}
+                  >
+                    ▶
+                  </button>
+                  <div>
+                    <strong>{w.word}</strong> <span className="muted">— {w.fr}</span>
+                    {w.example && <div className="example">{w.example}</div>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        <p className="muted small">Conseil : avec des écouteurs, Carla t'entend mieux. Dis « fin de la sesión » pour terminer.</p>
         {error && <p className="error">{error}</p>}
         <button className="primary big" onClick={begin}>
-          🎙️ Commencer avec Lucía
+          🎙️ Commencer avec Carla
         </button>
       </div>
     );
@@ -265,12 +279,14 @@ export default function Conversation({ scenario }: { scenario: Scenario }) {
   return (
     <div className="stack conversation">
       <div className="status">
-        <span className={`dot ${tutorSpeaking ? "speaking" : muted ? "muted-dot" : "listening"}`} />
+        <span className={`avatar-live ${tutorSpeaking ? "speaking" : muted ? "muted-dot" : "listening"}`}>
+          <img src="/carla.svg" alt="Carla" />
+        </span>
         <span>
           {phase === "connecting" && "Connexion…"}
           {phase === "reconnecting" && "Reconnexion…"}
-          {phase === "live" && (tutorSpeaking ? "Lucía parle" : muted ? "Micro coupé" : "Lucía t'écoute")}
-          {phase === "ending" && "Lucía prépare ton bilan…"}
+          {phase === "live" && (tutorSpeaking ? "Carla parle" : muted ? "Micro coupé" : "Carla t'écoute")}
+          {phase === "ending" && "Carla prépare ton bilan…"}
           {phase === "error" && "Problème de connexion"}
         </span>
         <span className="timer">{mm(elapsed)}</span>

@@ -5,7 +5,7 @@ import { db, type SessionRow } from "@/lib/db";
 import { isStale, type Turn } from "@/lib/debrief";
 import { frDate, minutes as fmtMinutes } from "@/lib/format";
 import type { Feedback } from "@/lib/prompts";
-import { getScenario } from "@/lib/scenarios";
+import { sessionSpec } from "@/lib/modes";
 import { Pending, Say } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const row = db().prepare("SELECT * FROM sessions WHERE id = ?").get(Number(id)) as SessionRow | undefined;
   if (!row) notFound();
-  const scenario = getScenario(row.scenario_id);
+  const spec = sessionSpec(row);
 
   const turns: Turn[] = row.transcript ? JSON.parse(row.transcript) : [];
   const transcript = turns.length ? (
@@ -40,7 +40,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
           <span className="muted small">{frDate(row.started_at)}</span>
         </header>
         <div>
-          <p className="eyebrow">Bilan · {scenario?.title}</p>
+          <p className="eyebrow">Bilan · {spec?.title}</p>
           <h1>Ton bilan</h1>
         </div>
         <Pending id={row.id} initialStatus={status} initialError={row.debrief_error} hasTranscript={!!turns.length} />
@@ -49,6 +49,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
     );
   }
   const fb = JSON.parse(row.feedback) as Feedback;
+  const canRedo = (fb.errors?.length ?? 0) + (fb.upgrades?.length ?? 0) > 0 && row.mode !== "review";
 
   return (
     <div className="stack">
@@ -57,7 +58,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
         <span className="muted small">{frDate(row.started_at)} · {fmtMinutes(row.duration_s)}</span>
       </header>
       <div>
-        <p className="eyebrow">Bilan · {scenario?.title}</p>
+        <p className="eyebrow">Bilan · {spec?.title}</p>
         <h1>¡Muy bien!</h1>
         <p>{fb.summary_fr}</p>
       </div>
@@ -138,11 +139,24 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
         </section>
       )}
 
+      {!!fb.learner_facts?.length && (
+        <section className="card">
+          <p className="eyebrow">Carla a retenu</p>
+          <ul>{fb.learner_facts.map((f, i) => <li key={i}>{f}</li>)}</ul>
+          <Link href="/profil#memoire" className="link small">Voir ou corriger sa mémoire ›</Link>
+        </section>
+      )}
+
       {transcript}
 
       <div className="controls">
-        {scenario && <Link className="secondary" href={`/session/${scenario.id}`}>Refaire cette séance</Link>}
-        <Link className="primary" href="/">Terminé</Link>
+        {canRedo && (
+          <Link className="primary big" href={`/pratique/refaire?from=${row.id}`}>
+            🎙️ Redire mes corrections avec Carla (5 min)
+          </Link>
+        )}
+        {spec?.scenarioId && <Link className="secondary" href={`/session/${spec.scenarioId}`}>Refaire toute la séance</Link>}
+        <Link className={canRedo ? "secondary" : "primary"} href="/">Terminé</Link>
       </div>
     </div>
   );

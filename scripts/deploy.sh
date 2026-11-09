@@ -80,6 +80,10 @@ else
   docker compose -f docker-compose.yml -f docker-compose.noproxy.yml up -d --build app
 fi
 
+# Daily database backup at 03:17 (server time), 14 days kept.
+chmod +x scripts/backup.sh
+( crontab -l 2>/dev/null | grep -v 'hablemos/scripts/backup.sh' ; echo "17 3 * * * DIR=$DIR $DIR/scripts/backup.sh >> /var/log/hablemos-backup.log 2>&1" ) | crontab -
+
 echo ""
 docker compose ps
 echo ""

@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hablemos",
-  description: "Parler espagnol avec Lucía, 15 minutes par jour",
+  title: "Hablemos con Carla",
+  description: "Parler espagnol avec Carla, 15 minutes par jour",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, title: "Hablemos", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "Carla", statusBarStyle: "default" },
   icons: { icon: "/icon.svg", apple: "/apple-touch-icon.png" },
 };
 
