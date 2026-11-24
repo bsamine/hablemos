@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { getCache } from "@/lib/cache";
@@ -15,6 +16,7 @@ const DEFAULTS = ["ser_estar", "verb_conjugation", "gustar", "gender_agreement"]
 
 export default async function Grammaire() {
   await requireAuth();
+  requireLab();
   const { level } = getProfile();
   const counted = db()
     .prepare("SELECT category, COUNT(*) AS n FROM errors WHERE category <> 'other' GROUP BY category ORDER BY n DESC")

@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
@@ -13,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Moment({ params }: { params: Promise<{ id: string }> }) {
   await requireAuth();
+  requireLab();
   const ev = getEvent(Number((await params).id));
   if (!ev) notFound();
   const kind = EVENT_KINDS.find((k) => k.id === ev.kind);

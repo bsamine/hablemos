@@ -1,3 +1,4 @@
+import { labGuard } from "@/lib/features";
 import { isAuthed } from "@/lib/auth";
 import { getCache, todayKey } from "@/lib/cache";
 import type { Podcast } from "@/lib/generate";
@@ -9,6 +10,8 @@ export const maxDuration = 180;
 /** Today's podcast read by Carla (generated once, cached). */
 export async function GET() {
   if (!(await isAuthed())) return new Response("unauthorized", { status: 401 });
+  const lab = labGuard();
+  if (lab) return lab;
   const p = getCache<Podcast>(`podcast:${todayKey()}`);
   if (!p) return new Response("pas d'épisode aujourd'hui", { status: 404 });
   try {

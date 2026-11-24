@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { daysUntil, EVENT_KINDS, listEvents } from "@/lib/events";
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 export default async function VieReelle({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   await requireAuth();
+  requireLab();
   const { e } = await searchParams;
   const events = listEvents();
   const ads = listJobAds();

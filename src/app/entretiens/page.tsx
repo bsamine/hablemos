@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { frDate } from "@/lib/format";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Entretiens({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   await requireAuth();
+  requireLab();
   const { e } = await searchParams;
   const ads = listJobAds();
   const done = doneScenarioIds();

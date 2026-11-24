@@ -1,3 +1,4 @@
+import { labEnabled } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { getCache, weekKey } from "@/lib/cache";
@@ -18,6 +19,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   await requireAuth();
+  const lab = labEnabled();
   const profile = getProfile();
   const s = stats();
   const done = doneScenarioIds();
@@ -31,7 +33,7 @@ export default async function Home() {
   const missionsDone = missionStats().done;
   const lessonsDone = LESSONS.filter((x) => done.has(x.id)).length;
   const plan = getCache<WeekPlan>(`plan:${weekKey()}`);
-  const soon = listEvents().upcoming.filter((e) => daysUntil(e.date) <= 3);
+  const soon = lab ? listEvents().upcoming.filter((e) => daysUntil(e.date) <= 3) : [];
 
   return (
     <div className="stack with-tabbar">
@@ -85,6 +87,7 @@ export default async function Home() {
         </Link>
       ))}
 
+      {lab && (
       <section className="card stack">
         <div className="top">
           <p className="eyebrow">Ta semaine avec Carla</p>
@@ -115,6 +118,7 @@ export default async function Home() {
           </>
         )}
       </section>
+      )}
 
       <Link href={`/session/${next.id}`} className="card hero">
         <p className="eyebrow">Aujourd'hui · {next.theme} · {next.level}</p>
@@ -123,7 +127,18 @@ export default async function Home() {
         <span className="primary pill">Parler avec Carla →</span>
       </Link>
 
-      {mission && <MissionCard mission={mission} next="/" />}
+      {lab && mission && <MissionCard mission={mission} next="/" />}
+
+      {s.due > 0 && (
+        <Link href="/pratique/revision" className="card area">
+          <span className="area-icon">⚡</span>
+          <span className="grow">
+            <strong>Révision express</strong>
+            <span className="muted small">{Math.min(s.due, 8)} mots à revoir · 4 min</span>
+          </span>
+          <span className="muted">›</span>
+        </Link>
+      )}
 
       <section className="areas">
         <Link href="/lecons" className="card area">
@@ -134,6 +149,8 @@ export default async function Home() {
           </span>
           <span className="muted">›</span>
         </Link>
+        {lab && (
+        <>
         <Link href="/entretiens" className="card area">
           <span className="area-icon">💼</span>
           <span className="grow">
@@ -150,6 +167,8 @@ export default async function Home() {
           </span>
           <span className="muted">›</span>
         </Link>
+        </>
+        )}
       </section>
 
       {recent.length > 0 && (

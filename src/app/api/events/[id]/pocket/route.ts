@@ -1,3 +1,4 @@
+import { labGuard } from "@/lib/features";
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { generatePocket } from "@/lib/generate";
@@ -7,6 +8,8 @@ export const maxDuration = 180;
 
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const lab = labGuard();
+  if (lab) return lab;
   try {
     return NextResponse.json(await generatePocket(Number((await ctx.params).id)));
   } catch (e) {

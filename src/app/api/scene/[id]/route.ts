@@ -1,3 +1,4 @@
+import { labGuard } from "@/lib/features";
 import fs from "node:fs";
 import path from "node:path";
 import { isAuthed } from "@/lib/auth";
@@ -14,6 +15,8 @@ const jobs = (g.__sceneJobs ??= new Map());
 /** Scene illustration: generated once with the image model, then served from disk. */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (!(await isAuthed())) return new Response("unauthorized", { status: 401 });
+  const lab = labGuard();
+  if (lab) return lab;
   const { id } = await ctx.params;
   const scene = SCENES.find((s) => s.id === id);
   if (!scene) return new Response("not found", { status: 404 });

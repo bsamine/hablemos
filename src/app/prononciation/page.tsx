@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { practiceSentences } from "@/lib/modes";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Prononciation() {
   await requireAuth();
+  requireLab();
   const sentences = practiceSentences(6);
   return (
     <div className="stack with-tabbar">

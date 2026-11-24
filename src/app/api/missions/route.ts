@@ -1,9 +1,12 @@
+import { labGuard } from "@/lib/features";
 import { isAuthed } from "@/lib/auth";
 import { setMission } from "@/lib/missions";
 import { go } from "@/lib/redirect";
 
 export async function POST(req: Request) {
   if (!(await isAuthed())) return go("/login");
+  const lab = labGuard();
+  if (lab) return lab;
   const f = await req.formData().catch(() => new FormData());
   const id = Number(f.get("id"));
   const status = f.get("status") === "skipped" ? "skipped" : "done";

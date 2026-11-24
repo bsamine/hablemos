@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { getCache, todayKey } from "@/lib/cache";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PodcastPage() {
   await requireAuth();
+  requireLab();
   const podcast = getCache<Podcast>(`podcast:${todayKey()}`);
   return (
     <div className="stack with-tabbar">

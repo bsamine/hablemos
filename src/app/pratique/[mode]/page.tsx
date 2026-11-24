@@ -1,3 +1,4 @@
+import { labEnabled } from "@/lib/features";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
@@ -39,6 +40,7 @@ export default async function Pratique({
   await requireAuth();
   const { mode } = await params;
   const q = await searchParams;
+  if (!labEnabled() && mode !== "refaire" && mode !== "revision") notFound();
 
   let spec: SessionSpec | null = null;
   let start: StartRequest | null = null;

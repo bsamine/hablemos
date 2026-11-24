@@ -1,3 +1,4 @@
+import { labEnabled } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -14,6 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Lecons() {
   await requireAuth();
+  const lab = labEnabled();
   const s = stats();
   const done = doneScenarioIds();
   const { level } = getProfile();
@@ -42,12 +44,16 @@ export default async function Lecons() {
           <strong>⚡ Révision express</strong>
           <span className="muted small">{s.due ? `${Math.min(s.due, 8)} mots · 4 min` : "Rien à revoir aujourd'hui"}</span>
         </Link>
-        <Link href="/pratique/shadowing" className="card">
-          <strong>🗣️ Shadowing</strong>
-          <span className="muted small">Répéter après Carla · 5 min</span>
-        </Link>
+        {lab && (
+          <Link href="/pratique/shadowing" className="card">
+            <strong>🗣️ Shadowing</strong>
+            <span className="muted small">Répéter après Carla · 5 min</span>
+          </Link>
+        )}
       </section>
 
+      {lab && (
+        <>
       <h3>S'entraîner autrement</h3>
       <section className="quick">
         <Link href="/journal" className="card">
@@ -88,6 +94,9 @@ export default async function Lecons() {
         </span>
         <span className="muted">›</span>
       </Link>
+
+        </>
+      )}
 
       <h3>Les leçons</h3>
       {themes.map((theme) => (

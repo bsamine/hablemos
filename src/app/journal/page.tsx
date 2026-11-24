@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { frDate } from "@/lib/format";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Journal() {
   await requireAuth();
+  requireLab();
   const notes = listVoiceNotes("diary", 14).filter((n) => n.status === "done");
   const lastQuestion = notes[0] ? (JSON.parse(notes[0].result!) as DiaryResult).question_es : "";
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });

@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Offre({ params }: { params: Promise<{ id: string }> }) {
   await requireAuth();
+  requireLab();
   const ad = getJobAd(Number((await params).id));
   if (!ad) notFound();
   const pack: InterviewPack | null = ad.pack ? JSON.parse(ad.pack) : null;

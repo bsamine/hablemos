@@ -1,3 +1,4 @@
+import { labGuard } from "@/lib/features";
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { saveVoiceNote, type VoiceKind } from "@/lib/voice";
@@ -8,6 +9,8 @@ const MAX_BYTES = 6 * 1024 * 1024; // ~3 min of 16 kHz WAV
 
 export async function POST(req: Request) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const lab = labGuard();
+  if (lab) return lab;
   const f = await req.formData().catch(() => null);
   const kind = String(f?.get("kind") ?? "") as VoiceKind;
   const file = f?.get("audio");

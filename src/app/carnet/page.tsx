@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { frDate } from "@/lib/format";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Carnet() {
   await requireAuth();
+  requireLab();
   const notes = listVoiceNotes("missing", 20).filter((n) => n.status === "done");
   return (
     <div className="stack with-tabbar">

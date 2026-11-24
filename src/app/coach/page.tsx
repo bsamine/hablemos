@@ -1,3 +1,4 @@
+import { requireLab } from "@/lib/features";
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import { getCache, weekKey } from "@/lib/cache";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Coach() {
   await requireAuth();
+  requireLab();
   const p = getProfile();
   const note = getCache<CoachNote>(`coach:${weekKey()}`);
   return (

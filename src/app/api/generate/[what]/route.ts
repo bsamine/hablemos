@@ -1,3 +1,4 @@
+import { labGuard } from "@/lib/features";
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { generateCoachNote, generateGrammarCard, generatePodcast, generateWeekPlan } from "@/lib/generate";
@@ -10,6 +11,8 @@ const CATEGORIES = ["verb_conjugation", "gender_agreement", "ser_estar", "word_o
 /** On-demand generation of the week's plan, coach note, podcast or a grammar card. */
 export async function POST(req: Request, ctx: { params: Promise<{ what: string }> }) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const lab = labGuard();
+  if (lab) return lab;
   const { what } = await ctx.params;
   try {
     switch (what) {
