@@ -1,3 +1,5 @@
+import { recentErrors } from "@/lib/errors";
+import { lastModelCheck } from "@/lib/models";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -10,11 +12,12 @@ export const dynamic = "force-dynamic";
 
 /**
  * For automations (n8n): daily reminder, weekly summary, alerts.
- * GET /api/n8n/summary with header "x-api-key: <N8N_API_KEY>" (or ?key=).
+ * GET /api/n8n/summary with header "x-api-key: <N8N_API_KEY>".
+ * (The key is no longer accepted in the URL: URLs end up in proxy logs.)
  */
 export async function GET(req: Request) {
   const expected = process.env.N8N_API_KEY ?? "";
-  const given = req.headers.get("x-api-key") ?? new URL(req.url).searchParams.get("key") ?? "";
+  const given = req.headers.get("x-api-key") ?? "";
   const ok =
     expected.length >= 16 &&
     given.length === expected.length &&
@@ -49,6 +52,14 @@ export async function GET(req: Request) {
     (topErr.length ? `À surveiller : ${topErr.join(", ")}. ` : "") +
     `Prépare ta semaine avec Carla : ${url}`;
 
+  const errors = recentErrors(24 * 3600_000);
+  const problems = [
+    ...failed.map((f) => `bilan de la séance ${f.id} en échec`),
+    ...errors.slice(0, 5).map((e) => `${e.source} : ${e.message}`),
+  ];
+  // For the alert workflow: send to Amine only when not null.
+  const alert = problems.length ? `⚠️ Hablemos — ${problems.length} problème(s) sur 24 h :\n- ${problems.join("\n- ")}` : null;
+
   return NextResponse.json({
     learner: profile.name || null,
     level: profile.level,
@@ -62,6 +73,8 @@ export async function GET(req: Request) {
     topErrors: p.errors.slice(0, 3).map((e) => ({ category: ERROR_LABELS[e.category] ?? e.category, last14days: e.recent })),
     failedDebriefs: failed,
     appUrl: url,
-    messages: { reminder_fr: reminder, sunday_fr: sunday },
+    errors24h: errors.map((e) => ({ at: e.at, source: e.source, message: e.message })),
+    models: lastModelCheck() ?? null,
+    messages: { reminder_fr: reminder, sunday_fr: sunday, alert_fr: alert },
   });
 }

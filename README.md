@@ -36,6 +36,13 @@ scripts/backup.sh      daily DB backup (cron installed by deploy.sh)
 
 ## Changelog
 
+### v0.2.0 — Stabilisation for the pilot
+- **Focus on the core loop.** Home shows the daily lesson, word review, lessons, feedback and progress. Interviews, real-life practice, podcast, telenovela, picture, shadowing, journal, grammar, pronunciation, coach and DELE are in the **Labo**: hidden (404) unless `FEATURES_LAB=1`. Nothing was deleted.
+- **A session is never lost.** The transcript is saved every few turns, every 20 s and when the page is hidden or closed (`sendBeacon`). A session the browser never ends (phone locked, Safari killed the tab) is closed after 30 min of silence and its feedback is generated. Debriefs lost in a redeploy are restarted.
+- **Reconnection that works on iPhone.** After a drop Carla resumes with Gemini's handle, or with a fresh connection plus the last exchanges. After two drops in a row, a « Reprendre » button restarts the microphone if iOS took it. The screen stays awake during a session (Wake Lock, iOS 18.4+ for home-screen apps). Fixed: closing a connection during a reconnect could start a second reconnect.
+- **Visibility.** Errors from the server and the browser go to an `error_log` table. `/api/n8n/summary` returns `errors24h`, the last model check and `messages.alert_fr`, which is non-null only when something needs a look. The configured Gemini models are checked at start-up and daily.
+- **Operations.** Versioned database migrations (`PRAGMA user_version`). Login is throttled: 5 wrong codes per address, then 15 min. The n8n key is accepted in the `x-api-key` header only. `/api/health` and a Docker healthcheck. `scripts/pull-backup.sh` copies the latest server backup to the Mac. Unit tests with `npm test`.
+
 ### v0.1.2
 - **Carla always has the same female voice.** Only female voices are offered, and a male voice saved earlier falls back to the default. In role-plays she changes tone, never voice.
 - **Carla uses your first name** from the first greeting, then every few exchanges.
@@ -191,3 +198,22 @@ docker compose stop app
 cp data/backups/hablemos-YYYY-MM-DD.db data/hablemos.db
 docker compose start app
 ```
+
+
+## Pilot operations
+
+- **n8n alert:** add a daily workflow that reads `/api/n8n/summary` with the header `x-api-key: <N8N_API_KEY>` and sends `messages.alert_fr` to you when it is not `null`. Existing workflows that used `?key=` must move to the header.
+- **Off-server backup:** run `./scripts/pull-backup.sh` from the Mac once a week (it keeps the 8 latest copies in `~/Documents/workspace/perso/hablemos-backups`).
+- **Labo:** set `FEATURES_LAB=1` in `.env` and redeploy to show the extra areas again.
+- **Tests:** `npm test` (unit tests, no Gemini calls) and `npm run typecheck`.
+
+### iPhone acceptance checklist (before handing it over)
+
+1. Install from Safari: Share → « Sur l'écran d'accueil ». Open from the icon and log in.
+2. Start the daily lesson, allow the microphone, and talk for 2 minutes. Carla answers with her voice and the subtitles follow.
+3. Lock the phone for 20 seconds, then unlock. Carla resumes on her own, or a « Reprendre » button appears and works.
+4. Call the phone during a session, or switch to another app for 1 minute, then come back and tap « Reprendre ». The microphone works again.
+5. Turn on airplane mode for 10 seconds, then turn it off. The session resumes, or « Terminer » keeps the conversation.
+6. Swipe the app away in the middle of a session. Within 35 minutes, the feedback for that session appears in /historique.
+7. Tap « Terminer et voir le bilan ». The feedback card arrives within a minute.
+8. The next day: « Révision express » shows the words due, and the n8n reminder arrives.
