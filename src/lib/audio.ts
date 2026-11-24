@@ -34,6 +34,11 @@ export class AudioIO {
     this.node.connect(sink).connect(this.ctx.destination);
   }
 
+  /** False once iOS has taken the microphone away (call, Siri, app in background). */
+  micAlive(): boolean {
+    return !!this.stream?.getAudioTracks().some((t) => t.readyState === "live" && t.enabled);
+  }
+
   /** Queue base64 PCM16 (24 kHz) from Gemini for gapless playback. */
   play(b64: string, rate = 24000) {
     const bytes = b64ToBytes(b64);
@@ -61,7 +66,9 @@ export class AudioIO {
     for (const s of this.playing) {
       try {
         s.stop();
-      } catch {}
+      } catch {
+        /* already stopped */
+      }
     }
     this.playing.clear();
     this.nextTime = 0;
@@ -74,7 +81,9 @@ export class AudioIO {
     this.stream?.getTracks().forEach((t) => t.stop());
     try {
       await this.ctx.close();
-    } catch {}
+    } catch {
+      /* already closed */
+    }
   }
 }
 

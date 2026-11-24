@@ -60,8 +60,9 @@ export async function createLiveToken(
   const ai = serverClient(apiVersion);
   const token = await ai.authTokens.create({
     config: {
-      // A few uses so the browser can reconnect (Gemini closes Live connections after ~10 min).
-      uses: 5,
+      // A few uses so the browser can reconnect (Gemini closes Live connections after ~10 min,
+      // and phones drop the connection on calls or when the screen locks).
+      uses: 8,
       expireTime: new Date(Date.now() + 40 * 60_000).toISOString(),
       newSessionExpireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
       liveConnectConstraints: { model, ...(config ? { config } : {}) },

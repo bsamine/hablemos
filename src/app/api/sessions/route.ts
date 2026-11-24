@@ -1,3 +1,5 @@
+import { logError } from "@/lib/errors";
+import { modeAllowed } from "@/lib/features";
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -15,7 +17,8 @@ export async function POST(req: Request) {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const body = (await req.json().catch(() => ({}))) as StartRequest;
   const spec = buildSpec(body);
-  if (!spec) return NextResponse.json({ error: "Cette séance n'est pas disponible." }, { status: 400 });
+  if (!spec || !modeAllowed(spec.mode))
+    return NextResponse.json({ error: "Cette séance n'est pas disponible." }, { status: 400 });
 
   const profile = getProfile();
   const missions = missionContext();
@@ -47,7 +50,7 @@ export async function POST(req: Request) {
       liveConfig(systemInstruction, { voice: profile.voice, level: profile.level }),
     );
   } catch (e) {
-    console.error("token error", e);
+    logError("live-token", e);
     return NextResponse.json({ error: "Impossible de contacter Gemini. Vérifie la clé API." }, { status: 502 });
   }
 

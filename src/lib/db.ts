@@ -12,7 +12,31 @@ export function db(): Db {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const conn = new Database(path.join(DATA_DIR, "hablemos.db"));
   conn.pragma("journal_mode = WAL");
-  conn.exec(`
+  conn.pragma("busy_timeout = 5000");
+  migrate(conn);
+  g.__hablemosDb = conn;
+  return conn;
+}
+
+function hasColumn(c: Db, table: string, col: string): boolean {
+  return (c.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).some((r) => r.name === col);
+}
+
+function addColumn(c: Db, table: string, def: string) {
+  const name = def.split(" ")[0];
+  if (!hasColumn(c, table, name)) c.exec(`ALTER TABLE ${table} ADD COLUMN ${def}`);
+}
+
+/**
+ * Schema changes, applied once each in order and recorded in PRAGMA user_version.
+ * Never edit a migration that has shipped: add a new one at the end.
+ * Migration 1 is tolerant (IF NOT EXISTS, column checks) because databases created before
+ * versioning already have part or all of it.
+ */
+export const MIGRATIONS: ((c: Db) => void)[] = [
+  // 1 — baseline: the schema as of v0.1.2
+  (c) => {
+    c.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       scenario_id TEXT NOT NULL,
@@ -42,8 +66,8 @@ export function db(): Db {
       rule_fr TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
-  `);
-  conn.exec(`
+    `);
+    c.exec(`
     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS voice_notes (
@@ -90,27 +114,36 @@ export function db(): Db {
       session_id INTEGER,
       created_at TEXT NOT NULL
     );
-  `);
-  for (const col of [
-    "debrief_status TEXT",
-    "debrief_error TEXT",
-    "debrief_started_at TEXT",
-    "mode TEXT",
-    "spec TEXT",
-  ]) {
-    try {
-      conn.exec(`ALTER TABLE sessions ADD COLUMN ${col}`);
-    } catch {
-      /* column already exists */
-    }
+    `);
+    for (const col of ["debrief_status TEXT", "debrief_error TEXT", "debrief_started_at TEXT", "mode TEXT", "spec TEXT"])
+      addColumn(c, "sessions", col);
+    addColumn(c, "job_ads", "pack TEXT");
+  },
+  // 2 — v0.2.0: transcript saved during the session, error log
+  (c) => {
+    addColumn(c, "sessions", "last_seen_at TEXT");
+    c.exec(`
+      CREATE TABLE IF NOT EXISTS error_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        detail TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS error_log_at ON error_log(at);
+    `);
+  },
+];
+
+export function migrate(c: Db): number {
+  const current = c.pragma("user_version", { simple: true }) as number;
+  for (let v = current; v < MIGRATIONS.length; v++) {
+    c.transaction(() => {
+      MIGRATIONS[v](c);
+      c.pragma(`user_version = ${v + 1}`);
+    })();
   }
-  try {
-    conn.exec("ALTER TABLE job_ads ADD COLUMN pack TEXT");
-  } catch {
-    /* exists */
-  }
-  g.__hablemosDb = conn;
-  return conn;
+  return MIGRATIONS.length;
 }
 
 export type SessionRow = {
@@ -128,6 +161,7 @@ export type SessionRow = {
   debrief_started_at: string | null;
   mode: string | null;
   spec: string | null;
+  last_seen_at: string | null;
 };
 
 export type WordRow = {

@@ -29,6 +29,26 @@ export type Preview = {
 
 /** Prepared sessions stay usable for 20 minutes (the token lives 30). */
 const PREPARED_TTL = 20 * 60_000;
+/** Save the transcript to the server at least this often while live. */
+const SAVE_EVERY_MS = 20_000;
+/** Automatic reconnections in a row before asking the learner to tap "Reprendre". */
+const MAX_AUTO_RECONNECTS = 2;
+
+/** Send a browser-side problem to the server log (it reaches the n8n alert). Never throws. */
+function report(where: string, message: string, detail?: unknown) {
+  try {
+    void fetch("/api/client-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ where, message, detail }),
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    /* reporting must never break the session */
+  }
+}
+
+type WakeLockSentinelLike = { release: () => Promise<void> };
 
 export default function Conversation({ preview, start }: { preview: Preview; start: StartRequest }) {
   const router = useRouter();
@@ -51,6 +71,74 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   const connectedAtRef = useRef(0);
   const gotAudioRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const savedCountRef = useRef(0);
+  const savedAtRef = useRef(0);
+  const autoReconnectsRef = useRef(0);
+  const genRef = useRef(0); // which connection is current: callbacks from older ones are ignored
+  const reconnectingRef = useRef(false);
+  const closedGenRef = useRef(-1); // last connection Gemini closed
+  const closeInfoRef = useRef("");
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+
+  function payload() {
+    return JSON.stringify({ transcript: turnsRef.current, durationS: (Date.now() - startedAtRef.current) / 1000 });
+  }
+
+  /** Save the transcript so far. `beacon` is for when the page is being hidden or closed. */
+  function saveProgress(beacon = false) {
+    const id = startRef.current?.sessionId;
+    if (!id || endingRef.current || !startedAtRef.current) return;
+    const count = turnsRef.current.length;
+    if (!count) return;
+    savedCountRef.current = count;
+    savedAtRef.current = Date.now();
+    const url = `/api/sessions/${id}/progress`;
+    if (beacon && navigator.sendBeacon?.(url, new Blob([payload()], { type: "application/json" }))) return;
+    void fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: payload(), keepalive: true }).catch(
+      (e) => console.warn("progress save failed", e),
+    );
+  }
+
+  async function keepAwake() {
+    try {
+      const wl = (navigator as unknown as { wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> } }).wakeLock;
+      if (wl && !wakeLockRef.current) wakeLockRef.current = await wl.request("screen");
+    } catch (e) {
+      console.warn("wake lock unavailable", e); // older iOS: the screen may lock, the transcript is saved anyway
+    }
+  }
+
+  function releaseAwake() {
+    const w = wakeLockRef.current;
+    wakeLockRef.current = null;
+    void w?.release().catch(() => undefined);
+  }
+
+  // Save regularly while live.
+  useEffect(() => {
+    if (phase !== "live" && phase !== "reconnecting") return;
+    const t = setInterval(() => {
+      if (turnsRef.current.length !== savedCountRef.current || Date.now() - savedAtRef.current > 60_000) saveProgress();
+    }, SAVE_EVERY_MS);
+    return () => clearInterval(t);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Phone locked, app switched, tab closed: save now. Back on screen: keep the screen awake again.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") {
+        saveProgress(true);
+        wakeLockRef.current = null; // the system releases it when hidden
+      } else if (sessionRef.current) void keepAwake();
+    };
+    const onPageHide = () => saveProgress(true);
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (phase !== "live" && phase !== "reconnecting") return;
@@ -89,6 +177,8 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
     else list.push({ role, text });
     turnsRef.current = list;
     setTurns(list.map((t) => ({ ...t })));
+    // A new turn started: save every few turns, not on every word.
+    if (list.length - savedCountRef.current >= 4) saveProgress();
   }
 
   function onMessage(msg: LiveServerMessage) {
@@ -106,10 +196,12 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
     if (sc?.outputTranscription?.text) addText("tutor", sc.outputTranscription.text);
     const upd = msg.sessionResumptionUpdate;
     if (upd?.resumable && upd.newHandle) handleRef.current = upd.newHandle;
-    if (msg.goAway) void reconnect();
+    if (msg.goAway) void reconnect("goAway");
+    if (sc?.turnComplete) autoReconnectsRef.current = 0; // the conversation is flowing again
   }
 
   async function connect(start: StartResponse) {
+    const gen = ++genRef.current;
     const ai = new GoogleGenAI({ apiKey: start.token, httpOptions: { apiVersion: start.apiVersion } });
     const session = await ai.live.connect({
       model: start.model,
@@ -120,16 +212,23 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
         sessionResumption: handleRef.current ? { handle: handleRef.current } : {},
       },
       callbacks: {
-        onmessage: onMessage,
+        onmessage: (m) => {
+          if (gen === genRef.current) onMessage(m);
+        },
         onerror: (e) => console.error("live error", e),
         onclose: (e) => {
+          if (gen !== genRef.current) return; // an older connection we closed ourselves
+          closedGenRef.current = gen;
+          closeInfoRef.current = `code ${e?.code ?? "?"} : ${e?.reason || "sans raison"}`;
           sessionRef.current = null;
           console.warn("live close", e?.code, e?.reason);
           if (endingRef.current) return;
           const early = Date.now() - connectedAtRef.current < 8000 || !gotAudioRef.current;
-          if (early) {
+          if (early && !turnsRef.current.length) {
             // Closed before the conversation really started: a config/model problem, not a network blip.
-            setError(`Gemini a fermé la connexion (code ${e?.code ?? "?"}) : ${e?.reason || "sans raison"}`);
+            const msg = `Gemini a fermé la connexion (code ${e?.code ?? "?"}) : ${e?.reason || "sans raison"}`;
+            report("live-close-early", msg, { model: start.model });
+            setError(msg);
             setPhase("error");
             return;
           }
@@ -137,30 +236,103 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
         },
       },
     });
+    if (closedGenRef.current === gen || gen !== genRef.current) {
+      // Closed (or replaced) before we even got it: don't keep a dead session.
+      try {
+        session.close();
+      } catch {
+        /* already closed */
+      }
+      throw new Error(`Gemini a fermé la connexion à l'ouverture (${closeInfoRef.current || "remplacée"})`);
+    }
     sessionRef.current = session;
     connectedAtRef.current = Date.now();
     return session;
   }
 
-  async function reconnect(reason?: string) {
-    if (endingRef.current || !startRef.current) return;
-    if (!handleRef.current) {
-      setError(reason ? `Connexion interrompue (${reason}).` : "Connexion interrompue.");
+  /** The last exchanges, so Carla can pick up where she was when the session can't be resumed. */
+  function recap(): string {
+    return turnsRef.current
+      .slice(-6)
+      .map((t) => `${t.role === "learner" ? "Elle" : "Carla"} : ${t.text.trim()}`)
+      .join("\n");
+  }
+
+  /**
+   * Reconnect after a drop. Gemini's resumption handle keeps the conversation; without one (or if it
+   * fails), a fresh connection is opened and Carla gets the last exchanges to continue naturally.
+   * `byUser` is a tap on "Reprendre": it may also need to restart the microphone (iOS takes it away).
+   */
+  async function reconnect(reason?: string, byUser = false) {
+    if (endingRef.current || !startRef.current || reconnectingRef.current) return;
+    if (!byUser && ++autoReconnectsRef.current > MAX_AUTO_RECONNECTS) {
+      report("live-reconnect", "Trop de coupures", { reason });
+      setError("La connexion est instable. Appuie sur « Reprendre » quand tu es prête, ou termine pour voir ton bilan.");
       setPhase("error");
       return;
     }
+    reconnectingRef.current = true;
     setPhase("reconnecting");
+    setError("");
+    genRef.current++; // from here on, the old connection's close/messages are ignored
     try {
       sessionRef.current?.close();
-    } catch {}
-    try {
-      await connect(startRef.current);
-      setPhase("live");
-    } catch (e) {
-      console.error(e);
-      setError(`Impossible de reprendre la conversation : ${e instanceof Error ? e.message : String(e)}`);
-      setPhase("error");
+    } catch {
+      /* already closed */
     }
+    sessionRef.current = null;
+    try {
+      if (byUser) await ensureAudio();
+      let fresh = !handleRef.current;
+      let session: Session;
+      try {
+        session = await connect(startRef.current);
+      } catch (e) {
+        if (fresh) throw e;
+        console.warn("resume with handle failed, starting fresh", e);
+        handleRef.current = null;
+        fresh = true;
+        session = await connect(startRef.current);
+      }
+      if (fresh) {
+        // A fresh connection has no memory of the conversation: give Carla the thread.
+        const lines = recap();
+        session.sendRealtimeInput({
+          text: lines
+            ? `(La connexion a été coupée. Voici la fin de votre échange :\n${lines}\nReprends naturellement là où vous en étiez, sans recommencer la séance.)`
+            : "(La connexion a été coupée. Reprends la séance naturellement.)",
+        });
+      }
+      setPhase("live");
+      void keepAwake();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      report("live-reconnect", msg, { reason });
+      setError(`Impossible de reprendre la conversation (${msg}). Réessaie, ou termine pour voir ton bilan : rien n'est perdu.`);
+      setPhase("error");
+    } finally {
+      reconnectingRef.current = false;
+    }
+  }
+
+  /** After a phone call or the app going to background, iOS may have suspended audio or taken the mic. */
+  async function ensureAudio() {
+    const audio = audioRef.current;
+    if (audio && audio.micAlive() && audio.ctx.state !== "closed") {
+      await audio.ctx.resume();
+      return;
+    }
+    await audio?.close();
+    const fresh = new AudioIO();
+    fresh.onLevel = setTutorSpeaking;
+    fresh.muted = muted;
+    audioRef.current = fresh;
+    await fresh.ctx.resume();
+    await fresh.start(sendChunk);
+  }
+
+  function sendChunk(b64: string) {
+    sessionRef.current?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } });
   }
 
   async function begin() {
@@ -174,9 +346,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
       await audio.ctx.resume(); // must happen inside the tap on iPhone
       // Microphone first: a mic problem shows up clearly and doesn't burn a Gemini token.
       // Chunks are dropped until the Gemini session exists.
-      await audio.start((b64) =>
-        sessionRef.current?.sendRealtimeInput({ audio: { data: b64, mimeType: "audio/pcm;rate=16000" } }),
-      );
+      await audio.start(sendChunk);
 
       if (!preparedRef.current || Date.now() - preparedRef.current.at > PREPARED_TTL) prepare();
       const prepared = preparedRef.current!;
@@ -189,6 +359,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
       await connect(data);
       startedAtRef.current = Date.now();
       setPhase("live");
+      void keepAwake();
       sessionRef.current?.sendRealtimeInput({
         text: `(La séance commence. Tu es Carla. Salue-la${data.learnerName ? ` (${data.learnerName})` : ""} et annonce la séance du jour : « ${preview.title} ».)`,
       });
@@ -206,15 +377,20 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
               ? "Le micro est utilisé par une autre application (Zoom, Teams, Notion…). Ferme-la puis réessaie."
               : `Erreur au démarrage : ${name ? name + " — " : ""}${msg}`,
       );
+      report("start", `${name ? name + ": " : ""}${msg}`);
       setPhase("error");
       await cleanup();
     }
   }
 
   async function cleanup() {
+    releaseAwake();
+    genRef.current++;
     try {
       sessionRef.current?.close();
-    } catch {}
+    } catch {
+      /* already closed */
+    }
     sessionRef.current = null;
     await audioRef.current?.close();
     audioRef.current = null;
@@ -223,18 +399,24 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   async function finish() {
     endingRef.current = true;
     setPhase("ending");
+    setError("");
     await cleanup();
     const id = startRef.current?.sessionId;
     if (!id) return router.push("/");
-    const res = await fetch(`/api/sessions/${id}/end`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ transcript: turnsRef.current, durationS: (Date.now() - startedAtRef.current) / 1000 }),
-    });
-    if (res.ok) router.push(`/feedback/${id}`);
-    else {
+    try {
+      const res = await fetch(`/api/sessions/${id}/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload(),
+      });
+      if (res.ok) return router.push(`/feedback/${id}`);
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "La séance n'a pas pu être enregistrée.");
+      throw new Error(data.error ?? `HTTP ${res.status}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      report("end", msg, { sessionId: id });
+      // The transcript stays in memory (and was saved along the way): she can simply tap again.
+      setError("Le bilan n'a pas pu être envoyé (connexion ?). Ta conversation est gardée : réessaie dans un instant.");
       setPhase("error");
     }
   }
@@ -348,6 +530,11 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
         {live && (
           <button className={`secondary ${muted ? "on" : ""}`} onClick={toggleMute}>
             {muted ? "🔇 Réactiver le micro" : "🎙️ Couper le micro"}
+          </button>
+        )}
+        {phase === "error" && !endingRef.current && (
+          <button className="secondary" onClick={() => void reconnect("user", true)}>
+            🔄 Reprendre la conversation
           </button>
         )}
         {phase !== "ending" && (

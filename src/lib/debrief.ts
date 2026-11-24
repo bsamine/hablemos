@@ -1,4 +1,5 @@
 import { db, type SessionRow } from "./db";
+import { logError } from "./errors";
 import { generateJson } from "./gemini";
 import { applyFeedback, knownErrors } from "./learning";
 import { addMission } from "./missions";
@@ -66,7 +67,7 @@ async function run(row: SessionRow, turns: Turn[]) {
     if (fb.mission?.fr) addMission(fb.mission.fr, fb.mission.phrase_es ?? "", row.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`debrief ${row.id} failed:`, msg);
+    logError("debrief", e, { sessionId: row.id });
     db().prepare("UPDATE sessions SET debrief_status = 'error', debrief_error = ? WHERE id = ?").run(msg, row.id);
   }
 }
