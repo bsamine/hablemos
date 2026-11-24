@@ -133,6 +133,34 @@ export const MIGRATIONS: ((c: Db) => void)[] = [
       CREATE INDEX IF NOT EXISTS error_log_at ON error_log(at);
     `);
   },
+  // 3 — v0.3.0: Gemini usage (tokens) and activity tracking
+  (c) => {
+    c.exec(`
+      CREATE TABLE IF NOT EXISTS usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        model TEXT NOT NULL DEFAULT '',
+        session_id INTEGER,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        input_audio_tokens INTEGER NOT NULL DEFAULT 0,
+        output_audio_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS usage_at ON usage(at);
+      CREATE UNIQUE INDEX IF NOT EXISTS usage_live_session ON usage(session_id) WHERE kind = 'live';
+      CREATE TABLE IF NOT EXISTS activity (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        target TEXT NOT NULL DEFAULT '',
+        detail TEXT NOT NULL DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS activity_at ON activity(at);
+    `);
+    addColumn(c, "sessions", "length TEXT");
+  },
 ];
 
 export function migrate(c: Db): number {
@@ -162,6 +190,7 @@ export type SessionRow = {
   mode: string | null;
   spec: string | null;
   last_seen_at: string | null;
+  length: string | null;
 };
 
 export type WordRow = {

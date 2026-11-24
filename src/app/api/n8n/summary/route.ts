@@ -1,4 +1,5 @@
 import { recentErrors } from "@/lib/errors";
+import { usageSummary } from "@/lib/usage";
 import { lastModelCheck } from "@/lib/models";
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
@@ -73,6 +74,15 @@ export async function GET(req: Request) {
     topErrors: p.errors.slice(0, 3).map((e) => ({ category: ERROR_LABELS[e.category] ?? e.category, last14days: e.recent })),
     failedDebriefs: failed,
     appUrl: url,
+    usage: (() => {
+      const u = usageSummary();
+      return {
+        todayEur: Number(u.today.costEur.toFixed(3)),
+        monthEur: Number(u.month.costEur.toFixed(2)),
+        monthTokens: u.month.tokens,
+        budgetEur: u.budgetEur,
+      };
+    })(),
     errors24h: errors.map((e) => ({ at: e.at, source: e.source, message: e.message })),
     models: lastModelCheck() ?? null,
     messages: { reminder_fr: reminder, sunday_fr: sunday, alert_fr: alert },

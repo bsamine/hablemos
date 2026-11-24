@@ -11,7 +11,7 @@ export function labEnabled(): boolean {
 }
 
 /** Session modes that are always available. */
-export const CORE_MODES: readonly Mode[] = ["scenario", "redo", "review"];
+export const CORE_MODES: readonly Mode[] = ["scenario", "random", "redo", "review"];
 
 export function modeAllowed(mode: Mode): boolean {
   return labEnabled() || CORE_MODES.includes(mode);

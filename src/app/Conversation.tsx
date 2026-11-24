@@ -3,7 +3,8 @@
 import { GoogleGenAI, Modality, type LiveServerMessage, type Session } from "@google/genai";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { AudioIO, speakEs } from "@/lib/audio";
+import { AudioIO } from "@/lib/audio";
+import { Say } from "./feedback/[id]/client";
 import type { StartRequest } from "@/lib/modes";
 import type { TargetWord } from "@/lib/scenarios";
 
@@ -25,6 +26,7 @@ export type Preview = {
   words: TargetWord[];
   wordsLabel?: string;
   image?: string;
+  minutes?: number;
 };
 
 /** Prepared sessions stay usable for 20 minutes (the token lives 30). */
@@ -79,9 +81,15 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   const closedGenRef = useRef(-1); // last connection Gemini closed
   const closeInfoRef = useRef("");
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const usageRef = useRef({ input: 0, output: 0, inputAudio: 0, outputAudio: 0 });
+  const timeUpSentRef = useRef(false);
 
   function payload() {
-    return JSON.stringify({ transcript: turnsRef.current, durationS: (Date.now() - startedAtRef.current) / 1000 });
+    return JSON.stringify({
+      transcript: turnsRef.current,
+      durationS: (Date.now() - startedAtRef.current) / 1000,
+      usage: usageRef.current,
+    });
   }
 
   /** Save the transcript so far. `beacon` is for when the page is being hidden or closed. */
@@ -146,6 +154,14 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
     return () => clearInterval(t);
   }, [phase]);
 
+  // Time is up: Carla wraps up by herself (once), the learner can still continue.
+  useEffect(() => {
+    if (phase === "live" && elapsed >= limit && !timeUpSentRef.current && sessionRef.current) {
+      timeUpSentRef.current = true;
+      sessionRef.current.sendRealtimeInput({ text: "[TIEMPO]" });
+    }
+  }, [elapsed, limit, phase]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [turns]);
@@ -183,6 +199,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
 
   function onMessage(msg: LiveServerMessage) {
     const sc = msg.serverContent;
+    if (msg.usageMetadata) addUsage(msg.usageMetadata);
     if (sc?.interrupted) audioRef.current?.stopPlayback();
     for (const part of sc?.modelTurn?.parts ?? []) {
       const d = part.inlineData;
@@ -198,6 +215,19 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
     if (upd?.resumable && upd.newHandle) handleRef.current = upd.newHandle;
     if (msg.goAway) void reconnect("goAway");
     if (sc?.turnComplete) autoReconnectsRef.current = 0; // the conversation is flowing again
+  }
+
+  /** Gemini reports tokens per turn: add them up (an estimate, shown on the Suivi page). */
+  function addUsage(u: NonNullable<LiveServerMessage["usageMetadata"]>) {
+    const audio = (d?: { modality?: string; tokenCount?: number }[]) =>
+      (d ?? []).filter((x) => String(x.modality ?? "").toUpperCase() === "AUDIO").reduce((n, x) => n + (x.tokenCount ?? 0), 0);
+    const input = u.promptTokenCount ?? 0;
+    const output = (u.responseTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0) || Math.max(0, (u.totalTokenCount ?? 0) - input);
+    const t = usageRef.current;
+    t.input += input;
+    t.output += output;
+    t.inputAudio += Math.min(input, audio(u.promptTokensDetails));
+    t.outputAudio += Math.min(output, audio(u.responseTokensDetails));
   }
 
   async function connect(start: StartResponse) {
@@ -254,7 +284,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
   function recap(): string {
     return turnsRef.current
       .slice(-6)
-      .map((t) => `${t.role === "learner" ? "Elle" : "Carla"} : ${t.text.trim()}`)
+      .map((t) => `${t.role === "learner" ? "Alumna" : "Carla"}: ${t.text.trim()}`)
       .join("\n");
   }
 
@@ -297,10 +327,9 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
       if (fresh) {
         // A fresh connection has no memory of the conversation: give Carla the thread.
         const lines = recap();
+        const name = startRef.current.learnerName;
         session.sendRealtimeInput({
-          text: lines
-            ? `(La connexion a été coupée. Voici la fin de votre échange :\n${lines}\nReprends naturellement là où vous en étiez, sans recommencer la séance.)`
-            : "(La connexion a été coupée. Reprends la séance naturellement.)",
+          text: `[RECONEXIÓN]${name ? ` Alumna: ${name}.` : ""}${lines ? `\n${lines}` : ""}`,
         });
       }
       setPhase("live");
@@ -360,9 +389,8 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
       startedAtRef.current = Date.now();
       setPhase("live");
       void keepAwake();
-      sessionRef.current?.sendRealtimeInput({
-        text: `(La séance commence. Tu es Carla. Salue-la${data.learnerName ? ` (${data.learnerName})` : ""} et annonce la séance du jour : « ${preview.title} ».)`,
-      });
+      // A private signal defined in Carla's prompt: nothing here may be read aloud.
+      sessionRef.current?.sendRealtimeInput({ text: `[INICIO]${data.learnerName ? ` Alumna: ${data.learnerName}.` : ""}` });
     } catch (e) {
       console.error(e);
       endingRef.current = true; // our own cleanup must not be reported as a Gemini close
@@ -453,13 +481,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
             <ul className="words">
               {preview.words.map((w) => (
                 <li key={w.word}>
-                  <button
-                    className="play"
-                    onClick={() => speakEs(w.example ? `${w.word}. ${w.example}` : w.word)}
-                    aria-label={`Écouter ${w.word}`}
-                  >
-                    ▶
-                  </button>
+<Say text={w.example ? `${w.word}. ${w.example}` : w.word} lang="es" />
                   <div>
                     <strong>{w.word}</strong> <span className="muted">— {w.fr}</span>
                     {w.example && <div className="example">{w.example}</div>}
@@ -469,7 +491,7 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
             </ul>
           </section>
         )}
-        <p className="muted small">Conseil : avec des écouteurs, Carla t'entend mieux. Dis « fin de la sesión » pour terminer.</p>
+        <p className="muted small">Conseil : avec des écouteurs, Carla t'entend mieux. Dis « fin de la sesión » pour terminer{preview.minutes ? ` · environ ${preview.minutes} min` : ""}.</p>
         {error && <p className="error">{error}</p>}
         <button className="primary big" onClick={begin}>
           🎙️ Commencer avec Carla
@@ -520,8 +542,9 @@ export default function Conversation({ preview, start }: { preview: Preview; sta
 
       {live && (
         <div className="helpers">
-          <button onClick={() => ask("Parle plus lentement, s'il te plaît.")}>🐢 Plus lentement</button>
-          <button onClick={() => ask("Explique-moi ça en français, s'il te plaît.")}>🇫🇷 En français</button>
+          <button onClick={() => ask("[AYUDA: repite tu última frase más despacio]")}>🐢 Plus lentement</button>
+          <button onClick={() => ask("[AYUDA: explícale tu última frase en francés, con acento francés]")}>🇫🇷 En français</button>
+          <button onClick={() => ask("[AYUDA: repite tu última frase]")}>🔁 Répète</button>
           <button onClick={() => setCaptions((c) => !c)}>{captions ? "Masquer" : "Afficher"} sous-titres</button>
         </div>
       )}

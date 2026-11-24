@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import Tracker from "./Tracker";
 
 export const metadata: Metadata = {
   title: "Hablemos con Carla",
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="fr">
       <body>
         <main className="app">{children}</main>
+        <Tracker />
       </body>
     </html>
   );

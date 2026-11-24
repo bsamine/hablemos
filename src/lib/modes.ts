@@ -5,9 +5,11 @@ import { getProfile } from "./profile";
 import { dueWords } from "./learning";
 import type { Feedback } from "./prompts";
 import { getScenario, SCENARIOS, type Scenario, type TargetWord } from "./scenarios";
+import { getSituation, type Situation } from "./situations";
 
 export type Mode =
   | "scenario"
+  | "random"
   | "redo"
   | "review"
   | "custom"
@@ -23,6 +25,7 @@ export type Mode =
 /** Which area of the app a mode belongs to. */
 export const AREA: Record<Mode, "lecons" | "entretiens" | "vie-reelle"> = {
   scenario: "lecons",
+  random: "lecons",
   redo: "lecons",
   review: "lecons",
   shadowing: "lecons",
@@ -47,6 +50,9 @@ export type SessionSpec = {
   episode?: number;
   sceneId?: string;
   deleLevel?: string;
+  situationId?: string;
+  /** Session format chosen by the learner (lessons and random conversations). */
+  length?: SessionLength;
   title: string; // shown in Spanish
   titleFr: string;
   taskGoal: string; // French, read by the learner and the tutor
@@ -58,8 +64,14 @@ export type SessionSpec = {
   plan: string;
 };
 
+export type SessionLength = "quick" | "long";
+export const LENGTH_MINUTES: Record<SessionLength, number> = { quick: 10, long: 30 };
+export const LENGTH_LABELS: Record<SessionLength, string> = { quick: "Rapide · 10 min", long: "Longue · 30 min" };
+export const asLength = (v: unknown): SessionLength => (v === "long" || v === "longue" ? "long" : "quick");
+
 export type StartRequest =
-  | { mode: "scenario"; scenarioId: string }
+  | { mode: "scenario"; scenarioId: string; length?: SessionLength }
+  | { mode: "random"; situationId: string; length?: SessionLength }
   | { mode: "redo"; fromSessionId: number }
   | { mode: "review" }
   | { mode: "custom"; topic: string }
@@ -74,11 +86,28 @@ export type StartRequest =
 
 const defaultMinutes = () => Number(process.env.SESSION_MINUTES ?? 15);
 
-export function scenarioSpec(s: Scenario): SessionSpec {
-  const minutes = defaultMinutes();
+export function scenarioSpec(s: Scenario, length: SessionLength = "quick"): SessionSpec {
+  const minutes = LENGTH_MINUTES[length];
+  const plan =
+    length === "quick"
+      ? `Séance RAPIDE d'environ ${minutes} minutes : rythme soutenu, pas de temps mort.
+1. Échauffement (1 min) : salue-la par son prénom et pose UNE question sur sa vie (reprends ce que tu sais d'elle).
+2. Préparation (2 min) : présente la tâche du jour en une phrase en français, puis les 5 mots du jour très rapidement (mot espagnol, sens français) ; elle répète chaque mot une fois.
+3. Tâche (5-6 min) : jeu de rôle ou conversation sur le thème. Tu joues : ${s.persona}. Fais-lui réutiliser au moins 3 mots du jour.
+4. Refaire (1 min) : redemande-lui la phrase clé de la tâche, pour qu'elle la dise correctement d'un trait.
+5. Fin : quand elle dit "fin de la sesión" ou à la fin du temps, félicite-la en une phrase en français et dis-lui que son bilan s'affiche à l'écran. Ne fais PAS le bilan à l'oral.`
+      : `Séance LONGUE d'environ ${minutes} minutes : prends le temps, approfondis, varie les activités pour garder son énergie.
+1. Échauffement (3 min) : salue-la par son prénom, demande-lui de ses nouvelles en reprenant ce que tu sais d'elle et votre dernière séance. Fais-lui utiliser 2 ou 3 mots à réviser.
+2. Préparation (4 min) : présente la tâche du jour en français, puis les 5 mots du jour. Pour chaque mot : le mot en espagnol, le sens en français, l'exemple ; elle répète, puis elle invente sa propre phrase avec le mot.
+3. Tâche, partie 1 (8 min) : jeu de rôle sur le thème. Tu joues : ${s.persona}. Fais-lui réutiliser les mots du jour.
+4. Tâche, partie 2 (6 min) : rejoue la scène avec un imprévu (un problème, un changement, une question inattendue) pour qu'elle improvise.
+5. Conversation libre (5 min) : sors du jeu de rôle et parle avec elle du thème dans SA vie (ses habitudes, ses souvenirs, son avis), avec des questions ouvertes.
+6. Refaire (3 min) : reprends les 2 ou 3 phrases qu'elle a eu le plus de mal à dire et fais-les redire d'un trait.
+7. Fin : quand elle dit "fin de la sesión" ou à la fin du temps, félicite-la en une phrase en français et dis-lui que son bilan s'affiche à l'écran. Ne fais PAS le bilan à l'oral.`;
   return {
     mode: "scenario",
     scenarioId: s.id,
+    length,
     title: s.title,
     titleFr: s.titleFr,
     taskGoal: s.taskGoal,
@@ -86,11 +115,33 @@ export function scenarioSpec(s: Scenario): SessionSpec {
     focus: s.focus,
     words: s.words,
     minutes,
-    plan: `1. Échauffement (1-2 min) : salue-la par son prénom, demande-lui de ses nouvelles en reprenant ce que tu sais d'elle, et fais-lui utiliser 2 ou 3 mots à réviser.
-2. Préparation (2 min) : présente la tâche du jour en une phrase en français, puis les 5 mots du jour. Pour chaque mot : le mot en espagnol, le sens en français, l'exemple. Elle répète chaque mot.
-3. Tâche (8-10 min) : jeu de rôle ou conversation sur le thème. Tu joues : ${s.persona}. Fais-lui réutiliser les mots du jour.
-4. Refaire (1-2 min) : redemande-lui la phrase clé de la tâche, pour qu'elle la dise correctement d'un trait.
-5. Fin : quand elle dit "fin de la sesión" ou après environ ${minutes} minutes, félicite-la en une phrase en français et dis-lui que son bilan s'affiche à l'écran. Ne fais PAS le bilan à l'oral.`,
+    plan,
+  };
+}
+
+/** "Conversation au hasard": a role-play or a life chat on an everyday situation. */
+export function randomSpec(sit: Situation, length: SessionLength = "quick"): SessionSpec {
+  const minutes = LENGTH_MINUTES[length];
+  const quick = length === "quick";
+  const plan = `${quick ? "Séance RAPIDE" : "Séance LONGUE"} d'environ ${minutes} minutes, sur une situation de la vie quotidienne : ${sit.setup}
+${sit.kind === "role-play" ? `C'est un jeu de rôle. Tu joues : ${sit.persona}.` : `C'est une discussion de la vie, naturelle, comme entre amies. Tu es : ${sit.persona}.`}
+1. Lancement (1 min) : salue-la par son prénom, dis en une phrase en français ce que vous allez faire, et ${sit.kind === "role-play" ? "qui tu vas jouer" : "lance le sujet par une question sur sa vie"}.
+2. Les mots utiles (${quick ? "1-2" : "3"} min) : choisis toi-même les ${quick ? "4" : "6"} mots ou expressions les plus utiles pour cette situation, adaptés à son niveau. Présente-les un par un (espagnol, sens en français) ; elle répète chaque mot.
+3. ${sit.kind === "role-play" ? "Jeu de rôle" : "Discussion"} (${quick ? "5-6" : "12"} min) : en espagnol d'Espagne, réaliste et vivant. Fais-lui utiliser les mots présentés. ${quick ? "" : "Au milieu, ajoute un imprévu ou change d'angle pour qu'elle improvise."}
+${quick ? "" : "4. Sa vie (6 min) : relie la situation à SA vie (est-ce que ça lui est déjà arrivé ? comment ça se passe en France ?) avec des questions ouvertes.\n"}${quick ? "4" : "5"}. Refaire (${quick ? "1" : "3"} min) : fais-lui redire d'un trait ${quick ? "la phrase la plus utile" : "les 2 ou 3 phrases les plus utiles"} de la situation.
+${quick ? "5" : "6"}. Fin : quand elle dit "fin de la sesión" ou à la fin du temps, félicite-la en français et dis-lui que son bilan s'affiche à l'écran. Ne fais PAS le bilan à l'oral.`;
+  return {
+    mode: "random",
+    situationId: sit.id,
+    length,
+    title: sit.title,
+    titleFr: sit.titleFr,
+    taskGoal: `${sit.titleFr} : ${sit.setup}`,
+    persona: sit.persona,
+    focus: sit.kind === "role-play" ? "situation de la vie quotidienne" : "discussion de la vie",
+    words: [],
+    minutes,
+    plan,
   };
 }
 
@@ -515,7 +566,11 @@ export function buildSpec(req: StartRequest): SessionSpec | null {
       return deleSpec(String(req.level));
     case "scenario": {
       const s = getScenario(req.scenarioId);
-      return s ? scenarioSpec(s) : null;
+      return s ? scenarioSpec(s, asLength(req.length)) : null;
+    }
+    case "random": {
+      const sit = getSituation(req.situationId);
+      return sit ? randomSpec(sit, asLength(req.length)) : null;
     }
     case "redo":
       return redoSpec(Number(req.fromSessionId));

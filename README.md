@@ -36,6 +36,16 @@ scripts/backup.sh      daily DB backup (cron installed by deploy.sh)
 
 ## Changelog
 
+### v0.3.0 — Retours du premier usage
+- **Two formats every day.** Each lesson can be done **Rapide (10 min)** or **Longue (30 min)**, chosen on the home card or on the lesson page. The long format adds a twist role-play, a free conversation about her life and a longer redo.
+- **Conversation au hasard** (new tab 🎲): 23 everyday situations, such as restaurant customer and waiter, the hairdresser, a move, dinner with friends, a flat visit, the doctor, the neighbours, a complaint call, and life chats about the weekend, work, family, travel and food. The situation is drawn at random for her level, avoiding recent ones, or she picks one. Both formats are available.
+- **Carla no longer reads her instructions aloud.** The app used to send French instructions (« Salue-la… », « Reprends naturellement… ») as if the learner had said them. They are now private signals (`[INICIO]`, `[RECONEXIÓN]`, `[TIEMPO]`, `[AYUDA: …]`) defined in Carla's prompt. The prompt starts with an absolute rule: speak *to* her, never read or announce an instruction. Missions are left out of Carla's prompt while the Labo is off.
+- **Carla keeps her name and profile in mind.** Her profile card moved to the top of the prompt and her name is repeated in a final reminder. After a reconnection, Carla gets her name and the last exchanges back. When the time is up, Carla wraps up by herself.
+- **Two native accents.** Carla speaks Spanish with a Castilian accent and French with a native French accent, switching inside a sentence. Pronunciation is explained by comparison with French sounds. The ▶ voice now has a French mode: explanations on the feedback card have their own ▶ and are read with a French accent. Before, everything was read as Spanish.
+- **▶ fixed.** Before, the button waited 12 s and then also started the robotic device voice, so both voices could play at once. Now the button shows loading, then ■ to stop, and waits up to 30 s for Carla's voice. The device voice is used only on failure, in the right language. All the audio of a feedback card is generated in the background as soon as the feedback is ready, so ▶ plays at once.
+- **Usage and Gemini consumption.** Every Gemini call is recorded with its tokens and an estimated cost: live conversations (tokens reported by Gemini to the browser), feedback, TTS, images and voice analysis. The Profile page shows today / 7 days / month against the monthly budget. The new **/suivi** page shows minutes and cost per day, cost by use, sessions by type and format, practice hours and the most opened pages. `/api/n8n/summary` returns `usage`.
+- **New visual identity « Atardecer en Madrid ».** Terracotta and saffron on cream, rounded headings (SF Rounded on iPhone), cards with soft shadows, a "today" card with a gradient and an azulejo motif, a frosted tab bar (Accueil, Leçons, Au hasard, Progrès, Profil) and a polished dark mode.
+
 ### v0.2.0 — Stabilisation for the pilot
 - **Focus on the core loop.** Home shows the daily lesson, word review, lessons, feedback and progress. Interviews, real-life practice, podcast, telenovela, picture, shadowing, journal, grammar, pronunciation, coach and DELE are in the **Labo**: hidden (404) unless `FEATURES_LAB=1`. Nothing was deleted.
 - **A session is never lost.** The transcript is saved every few turns, every 20 s and when the page is hidden or closed (`sendBeacon`). A session the browser never ends (phone locked, Safari killed the tab) is closed after 30 min of silence and its feedback is generated. Debriefs lost in a redeploy are restarted.
@@ -217,3 +227,7 @@ docker compose start app
 6. Swipe the app away in the middle of a session. Within 35 minutes, the feedback for that session appears in /historique.
 7. Tap « Terminer et voir le bilan ». The feedback card arrives within a minute.
 8. The next day: « Révision express » shows the words due, and the n8n reminder arrives.
+
+### Gemini cost estimate (v0.3.0)
+
+The amounts on Profile and /suivi are **estimates**: tokens reported by Gemini × prices in `.env` (USD per million tokens, converted with `EUR_PER_USD`). Check them against Google's current price list and the Cloud billing page, and adjust `PRICE_*` in `.env` if needed. `MONTHLY_BUDGET_EUR` sets the budget bar (default 15 €).

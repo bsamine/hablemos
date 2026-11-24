@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuth } from "@/lib/auth";
 import TabBar from "../TabBar";
+import UsageCard from "../UsageCard";
 import { frDate } from "@/lib/format";
 import { VOICES } from "@/lib/gemini";
 import { getProfile, LEVELS, listFacts } from "@/lib/profile";
@@ -95,8 +96,9 @@ export default async function Profil({ searchParams }: { searchParams: Promise<{
           <button className="secondary" type="submit">Ajouter</button>
         </form>
       </section>
+      <UsageCard />
       <p className="muted small center-small">Hablemos con Carla · v{VERSION}</p>
-      <TabBar active={""} />
+      <TabBar active="profil" />
     </div>
   );
 }

@@ -2,12 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { speakEs } from "@/lib/audio";
+import { speak, stopSpeaking, type SpeakState } from "@/lib/audio";
 
-export function Say({ text }: { text: string }) {
+/** ▶ button: loading while Carla's voice is prepared, ■ to stop while she speaks. */
+export function Say({ text, lang, rate }: { text: string; lang?: "es" | "fr"; rate?: number }) {
+  const [state, setState] = useState<SpeakState>("idle");
+  const busy = state !== "idle";
   return (
-    <button className="play" onClick={() => speakEs(text)} aria-label="Écouter">
-      ▶
+    <button
+      type="button"
+      className={`play ${state}`}
+      onClick={() => (busy ? stopSpeaking() : speak(text, { lang, rate, onState: setState }))}
+      aria-label={busy ? "Arrêter" : "Écouter"}
+    >
+      {state === "loading" ? <span className="spinner" aria-hidden /> : state === "playing" ? "■" : "▶"}
     </button>
   );
 }

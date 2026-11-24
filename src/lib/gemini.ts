@@ -1,4 +1,5 @@
 import { EndSensitivity, GoogleGenAI, Modality, type LiveConnectConfig, type Part } from "@google/genai";
+import { recordUsage, type UsageKind } from "./usage";
 
 export const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL ?? "gemini-3.8-live";
 export const LIVE_API_VERSION = process.env.GEMINI_LIVE_API_VERSION ?? "v1alpha";
@@ -63,8 +64,9 @@ export async function createLiveToken(
       // A few uses so the browser can reconnect (Gemini closes Live connections after ~10 min,
       // and phones drop the connection on calls or when the screen locks).
       uses: 8,
-      expireTime: new Date(Date.now() + 40 * 60_000).toISOString(),
-      newSessionExpireTime: new Date(Date.now() + 30 * 60_000).toISOString(),
+      // Long sessions last 30 min (+ reconnections): new connections are allowed for 55 min.
+      expireTime: new Date(Date.now() + 75 * 60_000).toISOString(),
+      newSessionExpireTime: new Date(Date.now() + 55 * 60_000).toISOString(),
       liveConnectConstraints: { model, ...(config ? { config } : {}) },
       // Lock only the fields set above; the browser may still send its session-resumption handle.
       ...(config ? { lockAdditionalFields: [] } : {}),
@@ -81,7 +83,11 @@ const isBusy = (msg: string) =>
 
 /** Ask a text model for JSON. Each model gets one retry when busy, then the next model is tried.
  *  `audio` (base64 WAV) is sent along with the prompt for voice notes. */
-export async function generateJson(prompt: string, audio?: { data: string; mimeType: string }): Promise<unknown> {
+export async function generateJson(
+  prompt: string,
+  audio?: { data: string; mimeType: string },
+  opts: { kind?: UsageKind; sessionId?: number } = {},
+): Promise<unknown> {
   const contents: string | Part[] = audio ? [{ text: prompt }, { inlineData: audio }] : prompt;
   const ai = serverClient("v1beta");
   const errors: string[] = [];
@@ -110,6 +116,7 @@ export async function generateJson(prompt: string, audio?: { data: string; mimeT
           abortSignal: AbortSignal.timeout(50_000), // a stuck call must not block the debrief
         },
       });
+      recordUsage(opts.kind ?? (audio ? "voice" : "generate"), model, res.usageMetadata, opts.sessionId);
       const text = res.text ?? "";
       const start = text.indexOf("{");
       const end = text.lastIndexOf("}");
@@ -136,6 +143,7 @@ export async function generateImage(prompt: string): Promise<Buffer> {
       abortSignal: AbortSignal.timeout(90_000),
     },
   });
+  recordUsage("image", IMAGE_MODEL, res.usageMetadata);
   for (const part of res.candidates?.[0]?.content?.parts ?? []) {
     if (part.inlineData?.data) return Buffer.from(part.inlineData.data, "base64");
   }
@@ -143,7 +151,12 @@ export async function generateImage(prompt: string): Promise<Buffer> {
 }
 
 /** Carla reading a text aloud (Gemini TTS). Returns a WAV file. */
-export async function generateSpeech(text: string, voice?: string, style = "Lee en español de España, despacio y con una voz clara y cálida de profesora"): Promise<Buffer> {
+export const TTS_STYLES = {
+  es: "Lee en español de España, con acento castellano nativo de Madrid, despacio y con una voz clara y cálida de profesora",
+  fr: "Lis ce texte en français de France, avec un accent français natif et parisien (surtout pas d'accent espagnol), d'une voix claire et chaleureuse de professeure",
+} as const;
+
+export async function generateSpeech(text: string, voice?: string, style: string = TTS_STYLES.es): Promise<Buffer> {
   const ai = serverClient("v1beta");
   const res = await ai.models.generateContent({
     model: TTS_MODEL,
@@ -154,6 +167,7 @@ export async function generateSpeech(text: string, voice?: string, style = "Lee 
       abortSignal: AbortSignal.timeout(90_000),
     },
   });
+  recordUsage("tts", TTS_MODEL, res.usageMetadata);
   const part = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!part?.inlineData?.data) throw new Error("aucun audio renvoyé");
   const pcm = Buffer.from(part.inlineData.data, "base64");

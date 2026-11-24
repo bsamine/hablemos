@@ -1,11 +1,13 @@
 import { db, type SessionRow } from "./db";
 import { logError } from "./errors";
+import { labEnabled } from "./features";
 import { generateJson } from "./gemini";
 import { applyFeedback, knownErrors } from "./learning";
 import { addMission } from "./missions";
 import { sessionSpec } from "./modes";
 import { addFacts, getProfile, listFacts } from "./profile";
 import { buildDebriefPrompt, type Feedback } from "./prompts";
+import { warmSpeech } from "./tts";
 
 export type Turn = { role: "learner" | "tutor"; text: string };
 
@@ -57,14 +59,31 @@ async function run(row: SessionRow, turns: Turn[]) {
       title: spec.title,
       taskGoal: spec.taskGoal,
       transcript,
+      missions: labEnabled(),
     });
-    const fb = (await generateJson(prompt)) as Feedback;
+    const fb = (await generateJson(prompt, undefined, { kind: "debrief", sessionId: row.id })) as Feedback;
     db()
       .prepare("UPDATE sessions SET feedback = ?, debrief_status = 'done', debrief_error = NULL WHERE id = ?")
       .run(JSON.stringify(fb), row.id);
     applyFeedback(row.id, spec.words, fb);
     if (Array.isArray(fb.learner_facts)) addFacts(fb.learner_facts, row.id);
-    if (fb.mission?.fr) addMission(fb.mission.fr, fb.mission.phrase_es ?? "", row.id);
+    if (labEnabled() && fb.mission?.fr) addMission(fb.mission.fr, fb.mission.phrase_es ?? "", row.id);
+    // Prepare Carla's voice for every ▶ on the feedback card, so it plays instantly.
+    warmSpeech([
+      ...(fb.errors ?? []).flatMap((x) => [x.correction, x.drill]),
+      ...(fb.upgrades ?? []).map((u) => u.better),
+      ...(fb.new_words ?? []).map((w) => w.word),
+      ...(fb.words ?? []).map((w) => w.word),
+      fb.mission?.phrase_es ?? "",
+    ]);
+    warmSpeech(
+      [
+        ...(fb.errors ?? []).map((x) => x.rule_fr),
+        ...(fb.upgrades ?? []).map((u) => u.why_fr),
+        fb.tomorrow_challenge ?? "",
+      ],
+      "fr",
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     logError("debrief", e, { sessionId: row.id });

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
+import { LIVE_MODEL } from "@/lib/gemini";
+import { recordLiveUsage } from "@/lib/usage";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/debrief";
 import { cleanTurns, longerTranscript } from "@/lib/transcript";
@@ -18,9 +20,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (row.feedback || row.ended_at) return NextResponse.json({ ok: true, ignored: true });
 
-  const body = (await req.json().catch(() => ({}))) as { transcript?: unknown; durationS?: number };
+  const body = (await req.json().catch(() => ({}))) as { transcript?: unknown; durationS?: number; usage?: unknown };
   const turns = cleanTurns(body.transcript);
   if (!turns) return NextResponse.json({ error: "bad transcript" }, { status: 400 });
+  if (body.usage) recordLiveUsage(id, LIVE_MODEL, body.usage);
   db()
     .prepare("UPDATE sessions SET transcript = ?, duration_s = MAX(COALESCE(duration_s, 0), ?), last_seen_at = ? WHERE id = ?")
     .run(

@@ -101,52 +101,110 @@ function b64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-let current: HTMLAudioElement | null = null;
+export type SpeakState = "loading" | "playing" | "idle";
+type Speaker = { audio: HTMLAudioElement | null; onState?: (s: SpeakState) => void; cancelled: boolean };
+let current: Speaker | null = null;
 
 /** Stop whatever Carla is currently saying. */
 export function stopSpeaking() {
-  current?.pause();
+  const c = current;
   current = null;
+  if (c) {
+    c.cancelled = true;
+    if (c.audio) {
+      c.audio.pause();
+      c.audio.removeAttribute("src");
+      c.audio.load();
+    }
+    c.onState?.("idle");
+  }
   if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
+/** Very small language guess for texts that mix nothing: French has its own letters and words. */
+export function guessLang(text: string): "es" | "fr" {
+  if (/[¿¡ñ]/i.test(text)) return "es";
+  if (/[àâçèêëîïôœùûÿ]|\b(je|tu|nous|vous|les|des|est|une|avec|pour|dans|c'est|qu'|l'|d')\b/i.test(text)) return "fr";
+  return "es";
+}
+
 /**
- * Carla says a Spanish text (Gemini TTS, cached on the server). `rate` applies instantly.
- * Falls back to a female device voice if the server voice is unavailable.
+ * Carla says a text with Gemini TTS (cached on the server), in Spanish (Castilian accent) or French
+ * (native French accent). `onState` drives the ▶ button. The server voice is waited for up to 30 s
+ * (first generation can be slow); only if it fails does a device voice read the text — never both.
  */
-export function speakEs(text: string, rate = 1): HTMLAudioElement | null {
+export function speak(
+  text: string,
+  opts: { lang?: "es" | "fr"; rate?: number; onState?: (s: SpeakState) => void } = {},
+): HTMLAudioElement | null {
   if (typeof window === "undefined" || !text) return null;
   stopSpeaking();
-  const a = new Audio(`/api/tts?t=${encodeURIComponent(text)}`);
+  const lang = opts.lang ?? guessLang(text);
+  const rate = opts.rate ?? 1;
+  const a = new Audio(`/api/tts?lang=${lang}&t=${encodeURIComponent(text)}`);
   a.playbackRate = rate;
   a.preservesPitch = true;
-  current = a;
+  const me: Speaker = { audio: a, onState: opts.onState, cancelled: false };
+  current = me;
+  opts.onState?.("loading");
   let started = false;
-  a.addEventListener("playing", () => (started = true), { once: true });
-  const fallback = () => {
-    if (started || current !== a) return;
-    current = null;
-    deviceSpeak(text, rate);
+  const done = () => {
+    if (current === me) current = null;
+    if (!me.cancelled) opts.onState?.("idle");
   };
-  a.addEventListener("error", fallback, { once: true });
-  setTimeout(fallback, 12_000);
-  a.play().catch(fallback);
+  a.addEventListener("playing", () => {
+    started = true;
+    if (!me.cancelled) opts.onState?.("playing");
+  });
+  a.addEventListener("ended", done, { once: true });
+  const fallback = (why: string) => {
+    if (started || me.cancelled || current !== me) return;
+    console.warn("server voice unavailable, using the device voice:", why);
+    me.cancelled = true; // the server audio must not start later on top of the device voice
+    a.pause();
+    a.removeAttribute("src");
+    me.audio = null;
+    deviceSpeak(text, rate, lang, () => {
+      if (current === me) current = null;
+      opts.onState?.("idle");
+    });
+    opts.onState?.("playing");
+  };
+  a.addEventListener("error", () => fallback("error"), { once: true });
+  const timer = setTimeout(() => fallback("timeout"), 30_000);
+  a.addEventListener("playing", () => clearTimeout(timer), { once: true });
+  a.play().catch((e: unknown) => {
+    if (e instanceof DOMException && e.name === "AbortError") return; // replaced by another ▶
+    fallback(String(e));
+  });
   return a;
+}
+
+/** Kept for existing callers: Spanish by default. */
+export function speakEs(text: string, rate = 1): HTMLAudioElement | null {
+  return speak(text, { lang: "es", rate });
 }
 
 const MALE = /jorge|diego|juan|carlos|pablo|enrique|miguel|andr[eé]s|male|hombre/i;
 
-function deviceSpeak(text: string, rate: number) {
-  if (!("speechSynthesis" in window)) return;
+function deviceSpeak(text: string, rate: number, lang: "es" | "fr" = "es", onEnd?: () => void) {
+  if (!("speechSynthesis" in window)) {
+    onEnd?.();
+    return;
+  }
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "es-ES";
+  const tag = lang === "fr" ? "fr-FR" : "es-ES";
+  u.lang = tag;
   u.rate = Math.max(0.6, Math.min(1.2, rate * 0.9));
-  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.startsWith("es"));
+  const voices = window.speechSynthesis.getVoices().filter((v) => v.lang.startsWith(lang));
+  const female = lang === "fr" ? /am[eé]lie|audrey|marie|aurelie|female|femme/i : /m[oó]nica|paulina|marisol|elvira|helena|female|mujer/i;
   const v =
-    voices.find((x) => x.lang === "es-ES" && /m[oó]nica|paulina|marisol|elvira|helena|female|mujer/i.test(x.name)) ??
-    voices.find((x) => x.lang === "es-ES" && !MALE.test(x.name)) ??
+    voices.find((x) => x.lang === tag && female.test(x.name)) ??
+    voices.find((x) => x.lang === tag && !MALE.test(x.name)) ??
     voices.find((x) => !MALE.test(x.name));
   if (v) u.voice = v;
+  u.onend = () => onEnd?.();
+  u.onerror = () => onEnd?.();
   window.speechSynthesis.speak(u);
 }

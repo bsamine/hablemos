@@ -1,5 +1,6 @@
 import { logError } from "@/lib/errors";
-import { modeAllowed } from "@/lib/features";
+import { track } from "@/lib/activity";
+import { labEnabled, modeAllowed } from "@/lib/features";
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -21,7 +22,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Cette séance n'est pas disponible." }, { status: 400 });
 
   const profile = getProfile();
-  const missions = missionContext();
+  // Missions live in the Labo: when it is off, Carla must not talk about them.
+  const missions = labEnabled() ? missionContext() : { pending: undefined, recentDone: [] };
   const targetWordList = spec.words.map((w) => w.word);
   const review = spec.mode === "review" ? [] : dueWords(3).filter((w) => !targetWordList.includes(w.word));
   const systemInstruction = buildTutorPrompt({
@@ -56,16 +58,18 @@ export async function POST(req: Request) {
 
   const info = db()
     .prepare(
-      "INSERT INTO sessions (scenario_id, started_at, target_words, review_words, mode, spec) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO sessions (scenario_id, started_at, target_words, review_words, mode, spec, length) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .run(
-      spec.scenarioId ?? spec.mode,
+      spec.scenarioId ?? spec.situationId ?? spec.mode,
       new Date().toISOString(),
       JSON.stringify(targetWordList),
       JSON.stringify(review.map((w) => w.word)),
       spec.mode,
       JSON.stringify(spec),
+      spec.length ?? null,
     );
+  track("session_prepared", spec.mode, { sessionId: Number(info.lastInsertRowid), length: spec.length, title: spec.title });
 
   return NextResponse.json({
     sessionId: Number(info.lastInsertRowid),

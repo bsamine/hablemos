@@ -152,7 +152,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
               <p className="better">
                 <Say text={e.correction} /> {e.correction}
               </p>
-              <p className="muted">{e.rule_fr}</p>
+              <p className="muted explain"><Say text={e.rule_fr} lang="fr" /> {e.rule_fr}</p>
               <p className="drill">
                 <Say text={e.drill} /> À répéter : <em>{e.drill}</em>
               </p>
@@ -168,7 +168,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
             <div className="card" key={i}>
               <p className="said">« {u.learner_said} »</p>
               <p className="better"><Say text={u.better} /> {u.better}</p>
-              <p className="muted">{u.why_fr}</p>
+              <p className="muted explain"><Say text={u.why_fr} lang="fr" /> {u.why_fr}</p>
             </div>
           ))}
         </section>

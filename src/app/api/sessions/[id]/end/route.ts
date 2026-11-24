@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/activity";
 import { isAuthed } from "@/lib/auth";
+import { LIVE_MODEL } from "@/lib/gemini";
+import { recordLiveUsage } from "@/lib/usage";
 import { db } from "@/lib/db";
 import { getSession, startDebrief } from "@/lib/debrief";
 import { cleanTurns, longerTranscript } from "@/lib/transcript";
@@ -13,8 +16,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const row = getSession(id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  const body = (await req.json().catch(() => ({}))) as { transcript?: unknown; durationS?: number };
+  const body = (await req.json().catch(() => ({}))) as { transcript?: unknown; durationS?: number; usage?: unknown };
   const turns = cleanTurns(body.transcript);
+  if (body.usage) recordLiveUsage(id, LIVE_MODEL, body.usage);
   if (turns && !row.feedback) {
     db()
       .prepare("UPDATE sessions SET ended_at = COALESCE(ended_at, ?), duration_s = MAX(COALESCE(duration_s, 0), ?), transcript = ? WHERE id = ?")
@@ -26,5 +30,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
   }
   const state = startDebrief(id);
+  if (turns) track("session_end", row.mode ?? "scenario", { sessionId: id, durationS: body.durationS, state });
   return NextResponse.json({ ok: true, sessionId: id, state });
 }

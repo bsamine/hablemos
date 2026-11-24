@@ -1,3 +1,4 @@
+import { track } from "./activity";
 import { db, type SessionRow } from "./db";
 import { isStale, startDebrief, type Turn } from "./debrief";
 import { logError } from "./errors";
@@ -27,6 +28,7 @@ export function sweep(now = Date.now()): { closed: number[]; restarted: number[]
     const turns: Turn[] = row.transcript ? JSON.parse(row.transcript) : [];
     const end = row.last_seen_at ?? row.started_at;
     db().prepare("UPDATE sessions SET ended_at = ? WHERE id = ?").run(end, row.id);
+    track("session_abandoned", row.mode ?? "scenario", { sessionId: row.id, turns: turns.length });
     if (turns.some((t) => t.role === "learner")) {
       startDebrief(row.id);
       closed.push(row.id);

@@ -85,5 +85,5 @@ function cleanupOldAudio() {
 
 /** Shared helper: ask the model about a recording and get JSON back. */
 export function analyseAudio(prompt: string, audio: { data: string; mimeType: string }) {
-  return generateJson(prompt, audio);
+  return generateJson(prompt, audio, { kind: "voice" });
 }
